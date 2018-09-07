@@ -7,8 +7,14 @@
     <x>0</x>
     <y>0</y>
     <width>937</width>
-    <height>957</height>
+    <height>880</height>
    </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>400</width>
+    <height>400</height>
+   </size>
   </property>
   <property name="contextMenuPolicy">
    <enum>Qt::ActionsContextMenu</enum>
@@ -21,12 +27,28 @@
     <item row="0" column="0">
      <layout class="QVBoxLayout" name="verticalLayout_3">
       <item>
-       <widget class="QWidget" name="widget" native="true"/>
+       <widget class="QWidget" name="widget" native="true">
+        <property name="minimumSize">
+         <size>
+          <width>400</width>
+          <height>400</height>
+         </size>
+        </property>
+       </widget>
       </item>
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout_2">
         <item>
          <widget class="QGroupBox" name="groupBox">
+          <property name="maximumSize">
+           <size>
+            <width>310</width>
+            <height>240</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">QWidget{color:white}</string>
+          </property>
           <property name="title">
            <string>Select Device (A)</string>
           </property>
@@ -48,7 +70,14 @@
                   </widget>
                  </item>
                  <item>
-                  <widget class="QComboBox" name="common1"/>
+                  <widget class="QComboBox" name="common1">
+                   <property name="minimumSize">
+                    <size>
+                     <width>200</width>
+                     <height>25</height>
+                    </size>
+                   </property>
+                  </widget>
                  </item>
                 </layout>
                </item>
@@ -81,6 +110,15 @@
         </item>
         <item>
          <widget class="QGroupBox" name="groupBox_2">
+          <property name="maximumSize">
+           <size>
+            <width>310</width>
+            <height>240</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">QWidget{color:white}</string>
+          </property>
           <property name="title">
            <string>Select Device (B)</string>
           </property>
@@ -102,7 +140,14 @@
                   </widget>
                  </item>
                  <item>
-                  <widget class="QComboBox" name="common2"/>
+                  <widget class="QComboBox" name="common2">
+                   <property name="minimumSize">
+                    <size>
+                     <width>200</width>
+                     <height>25</height>
+                    </size>
+                   </property>
+                  </widget>
                  </item>
                 </layout>
                </item>
@@ -135,6 +180,12 @@
         </item>
         <item>
          <widget class="QGroupBox" name="groupBox_4">
+          <property name="maximumSize">
+           <size>
+            <width>310</width>
+            <height>240</height>
+           </size>
+          </property>
           <property name="palette">
            <palette>
             <active>
@@ -184,8 +235,8 @@
                 <widget class="QLabel" name="label_2">
                  <property name="maximumSize">
                   <size>
-                   <width>50</width>
-                   <height>16777215</height>
+                   <width>60</width>
+                   <height>30</height>
                   </size>
                  </property>
                  <property name="palette">
@@ -194,9 +245,18 @@
                     <colorrole role="WindowText">
                      <brush brushstyle="SolidPattern">
                       <color alpha="255">
-                       <red>0</red>
+                       <red>146</red>
+                       <green>145</green>
+                       <blue>144</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                    <colorrole role="Text">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>100</red>
                        <green>255</green>
-                       <blue>0</blue>
+                       <blue>100</blue>
                       </color>
                      </brush>
                     </colorrole>
@@ -205,9 +265,18 @@
                     <colorrole role="WindowText">
                      <brush brushstyle="SolidPattern">
                       <color alpha="255">
-                       <red>0</red>
+                       <red>146</red>
+                       <green>145</green>
+                       <blue>144</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                    <colorrole role="Text">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>100</red>
                        <green>255</green>
-                       <blue>0</blue>
+                       <blue>100</blue>
                       </color>
                      </brush>
                     </colorrole>
@@ -222,11 +291,23 @@
                       </color>
                      </brush>
                     </colorrole>
+                    <colorrole role="Text">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>165</red>
+                       <green>164</green>
+                       <blue>164</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
                    </disabled>
                   </palette>
                  </property>
                  <property name="text">
                   <string>Points:</string>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignCenter</set>
                  </property>
                 </widget>
                </item>
@@ -235,7 +316,7 @@
                  <property name="maximumSize">
                   <size>
                    <width>50</width>
-                   <height>16777215</height>
+                   <height>25</height>
                   </size>
                  </property>
                  <property name="palette">
@@ -244,9 +325,9 @@
                     <colorrole role="Text">
                      <brush brushstyle="SolidPattern">
                       <color alpha="255">
-                       <red>0</red>
-                       <green>255</green>
-                       <blue>0</blue>
+                       <red>165</red>
+                       <green>164</green>
+                       <blue>164</blue>
                       </color>
                      </brush>
                     </colorrole>
@@ -255,9 +336,9 @@
                     <colorrole role="Text">
                      <brush brushstyle="SolidPattern">
                       <color alpha="255">
-                       <red>0</red>
-                       <green>255</green>
-                       <blue>0</blue>
+                       <red>165</red>
+                       <green>164</green>
+                       <blue>164</blue>
                       </color>
                      </brush>
                     </colorrole>
@@ -278,12 +359,21 @@
                  <property name="text">
                   <string>2800</string>
                  </property>
+                 <property name="alignment">
+                  <set>Qt::AlignCenter</set>
+                 </property>
                 </widget>
                </item>
               </layout>
              </item>
              <item>
               <widget class="QPushButton" name="draw_button">
+               <property name="minimumSize">
+                <size>
+                 <width>95</width>
+                 <height>50</height>
+                </size>
+               </property>
                <property name="text">
                 <string>Start</string>
                </property>
@@ -291,6 +381,12 @@
              </item>
              <item>
               <widget class="QPushButton" name="stop_button">
+               <property name="minimumSize">
+                <size>
+                 <width>95</width>
+                 <height>50</height>
+                </size>
+               </property>
                <property name="text">
                 <string>Stop</string>
                </property>
@@ -300,6 +396,12 @@
               <layout class="QVBoxLayout" name="verticalLayout_4">
                <item>
                 <widget class="QPushButton" name="log_button">
+                 <property name="minimumSize">
+                  <size>
+                   <width>95</width>
+                   <height>24</height>
+                  </size>
+                 </property>
                  <property name="text">
                   <string>LCLS Log</string>
                  </property>
@@ -307,6 +409,12 @@
                </item>
                <item>
                 <widget class="QPushButton" name="mcclog_button">
+                 <property name="minimumSize">
+                  <size>
+                   <width>95</width>
+                   <height>24</height>
+                  </size>
+                 </property>
                  <property name="text">
                   <string>MCC Log</string>
                  </property>
@@ -324,8 +432,45 @@
           <property name="maximumSize">
            <size>
             <width>160</width>
-            <height>16777215</height>
+            <height>270</height>
            </size>
+          </property>
+          <property name="palette">
+           <palette>
+            <active>
+             <colorrole role="WindowText">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>255</red>
+                <green>255</green>
+                <blue>255</blue>
+               </color>
+              </brush>
+             </colorrole>
+            </active>
+            <inactive>
+             <colorrole role="WindowText">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>255</red>
+                <green>255</green>
+                <blue>255</blue>
+               </color>
+              </brush>
+             </colorrole>
+            </inactive>
+            <disabled>
+             <colorrole role="WindowText">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>146</red>
+                <green>145</green>
+                <blue>144</blue>
+               </color>
+              </brush>
+             </colorrole>
+            </disabled>
+           </palette>
           </property>
           <property name="title">
            <string>Settings</string>
@@ -362,6 +507,11 @@
              </item>
              <item>
               <widget class="QCheckBox" name="AFFT">
+               <property name="font">
+                <font>
+                 <pointsize>12</pointsize>
+                </font>
+               </property>
                <property name="text">
                 <string>Plot A FFT</string>
                </property>
@@ -428,6 +578,43 @@
                    <height>16777215</height>
                   </size>
                  </property>
+                 <property name="palette">
+                  <palette>
+                   <active>
+                    <colorrole role="Text">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>100</red>
+                       <green>255</green>
+                       <blue>100</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                   </active>
+                   <inactive>
+                    <colorrole role="Text">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>100</red>
+                       <green>255</green>
+                       <blue>100</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                   </inactive>
+                   <disabled>
+                    <colorrole role="Text">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>165</red>
+                       <green>164</green>
+                       <blue>164</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                   </disabled>
+                  </palette>
+                 </property>
                  <property name="text">
                   <string>Order:</string>
                  </property>
@@ -441,8 +628,45 @@
                  <property name="maximumSize">
                   <size>
                    <width>30</width>
-                   <height>16777215</height>
+                   <height>30</height>
                   </size>
+                 </property>
+                 <property name="palette">
+                  <palette>
+                   <active>
+                    <colorrole role="Text">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>100</red>
+                       <green>255</green>
+                       <blue>100</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                   </active>
+                   <inactive>
+                    <colorrole role="Text">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>100</red>
+                       <green>255</green>
+                       <blue>100</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                   </inactive>
+                   <disabled>
+                    <colorrole role="Text">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>165</red>
+                       <green>164</green>
+                       <blue>164</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                   </disabled>
+                  </palette>
                  </property>
                  <property name="text">
                   <string>2</string>
