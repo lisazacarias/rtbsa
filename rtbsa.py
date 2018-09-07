@@ -28,22 +28,45 @@ from rtbsa_ui import Ui_RTBSA as BSA_UI
 class RTBSA(QMainWindow):
     def __init__(self, parent=None):
         QMainWindow.__init__(self, parent)
-        self.ui = BSA_UI()#References the UI class I created above
+        self.ui = BSA_UI()
         self.ui.setupUi(self)
         self.setWindowTitle('Real Time BSA')
         self.loadStyleSheet()
         self.setUpGraph()        
-        QObject.connect(self.ui.enter1, SIGNAL("textChanged(const QString&)"), self.search1)
-        QObject.connect(self.ui.enter2, SIGNAL("textChanged(const QString&)"), self.search2)
+        QObject.connect(self.ui.enter1, SIGNAL("textChanged(const QString&)"),
+                        self.search1)
+        QObject.connect(self.ui.enter2, SIGNAL("textChanged(const QString&)"),
+                        self.search2)
         self.ui.listWidget.itemClicked.connect(self.setenter1)
         self.ui.listWidget_2.itemClicked.connect(self.setenter2)
-        self.bsapvs=['GDET:FEE1:241:ENRC','GDET:FEE1:242:ENRC','GDET:FEE1:361:ENRC','GDET:FEE1:362:ENRC']
-        bsapvs=check_output(['eget','-s','LCLS:BSA_PVS']).splitlines()[1:-1]#Generate list of BSA PVS
+        self.bsapvs = ['GDET:FEE1:241:ENRC', 'GDET:FEE1:242:ENRC',
+                       'GDET:FEE1:361:ENRC', 'GDET:FEE1:362:ENRC']
+        
+        #Generate list of BSA PVS
+        bsapvs = check_output(['eget','-s','LCLS:BSA_PVS']).splitlines()[1:-1]
+        
         self.bsapvs.extend([pv.split()[-2] for pv in bsapvs])
         for pv in self.bsapvs:
             self.ui.listWidget.addItem(pv)
             self.ui.listWidget_2.addItem(pv)
-        commonlist=['GDET:FEE1:241:ENRC','GDET:FEE1:242:ENRC','GDET:FEE1:361:ENRC','GDET:FEE1:362:ENRC','KLYS:LI20:K6:VOLT','ACCL:IN20:300:L0A_P','ACCL:IN20:300:L0A_A','KLYS:LI20:K7:VOLT','ACCL:IN20:400:L0B_P','ACCL:IN20:400:L0B_A','KLYS:LI20:K8:VOLT','BPMS:IN20:731:X','ACCL:LI21:1:L1S_P','ACCL:LI21:1:L1S_A','KLYS:LI21:K1:VOLT','ACCL:LI21:180:L1X_P','ACCL:LI21:180:L1X_A','KLYS:LI21:K2:VOLT','BPMS:LI21:233:X','BLEN:LI21:265:AIMAX','BPMS:LI24:801:X','BLEN:LI24:886:BIMAX','BPMS:LTU1:250:X','BPMS:LTU1:450:X','BPMS:UND1:1090:X','BPMS:UND1:1090:Y','BPMS:UND1:2090:X','BPMS:UND1:2090:Y','BLD:SYS0:500:UND_POS_X','BLD:SYS0:500:UND_ANG_X','BLD:SYS0:500:UND_POS_Y','BLD:SYS0:500:UND_ANG_Y']
+        
+        commonlist = ['GDET:FEE1:241:ENRC', 'GDET:FEE1:242:ENRC',
+                      'GDET:FEE1:361:ENRC', 'GDET:FEE1:362:ENRC',
+                      'KLYS:LI20:K6:VOLT', 'ACCL:IN20:300:L0A_P',
+                      'ACCL:IN20:300:L0A_A', 'KLYS:LI20:K7:VOLT',
+                      'ACCL:IN20:400:L0B_P', 'ACCL:IN20:400:L0B_A',
+                      'KLYS:LI20:K8:VOLT', 'BPMS:IN20:731:X',
+                      'ACCL:LI21:1:L1S_P', 'ACCL:LI21:1:L1S_A',
+                      'KLYS:LI21:K1:VOLT', 'ACCL:LI21:180:L1X_P',
+                      'ACCL:LI21:180:L1X_A', 'KLYS:LI21:K2:VOLT',
+                      'BPMS:LI21:233:X', 'BLEN:LI21:265:AIMAX',
+                      'BPMS:LI24:801:X', 'BLEN:LI24:886:BIMAX',
+                      'BPMS:LTU1:250:X', 'BPMS:LTU1:450:X', 'BPMS:UND1:1090:X',
+                      'BPMS:UND1:1090:Y', 'BPMS:UND1:2090:X',
+                      'BPMS:UND1:2090:Y', 'BLD:SYS0:500:UND_POS_X',
+                      'BLD:SYS0:500:UND_ANG_X', 'BLD:SYS0:500:UND_POS_Y',
+                      'BLD:SYS0:500:UND_ANG_Y']
+                      
         self.ui.common1.addItems(commonlist)
         self.ui.common2.addItems(commonlist)
         self.ui.common1.setCurrentIndex(24)
@@ -58,7 +81,7 @@ class RTBSA(QMainWindow):
         self.ui.std_cb.clicked.connect(self.std_click)
         self.ui.corr_cb.clicked.connect(self.corr_click)
         self.ui.parab_cb.clicked.connect(self.parab_click)
- 	self.ui.line_cb.clicked.connect(self.line_click)
+        self.ui.line_cb.clicked.connect(self.line_click)
         self.ui.fitedit.returnPressed.connect(self.fitorderactivated)       
         self.ui.common1_rb.clicked.connect(self.common_1_click)
         self.ui.common2_rb.clicked.connect(self.common_2_click)
@@ -69,10 +92,15 @@ class RTBSA(QMainWindow):
         self.ui.enter1.returnPressed.connect(self.commonactivated)
         self.ui.enter2.returnPressed.connect(self.commonactivated)
         self.ui.points.returnPressed.connect(self.points_entered)
-        self.numpoints=2800#Initial number of points
-        self.updatetime=20#20ms polling time
-        self.fitorder=2#Set initial polynomial fit to 2
+        
+        #Initial number of points
+        self.numpoints=2800
+        #20ms polling time
+        self.updatetime=20
+        #Set initial polynomial fit to 2
+        self.fitorder=2
         self.dpi = 100
+        
         self.ui.fitedit.setDisabled(True)
         self.ui.enter1.setDisabled(True)
         self.ui.enter2.setDisabled(True)
@@ -82,31 +110,34 @@ class RTBSA(QMainWindow):
         self.statusBar().showMessage('Hi there!  I missed you!')
         self.abort=True
         self.ui.parab_cb.setChecked(False)
-        self.timer=QTimer(self)#Used to update plot
+        #Used to update plot
+        self.timer=QTimer(self)
         self.rate = PV('EVNT:SYS0:1:LCLSBEAMRATE') 
-        #self.timer2=QTimer(self)#Kludge to prevent double fit plotting 
+        #Kludge to prevent double fit plotting
+        #self.timer2=QTimer(self) 
         self.menuBar().setStyleSheet('QWidget{background-color:grey;color:purple}') 
         self.create_menu()
         self.create_status_bar()
 
     def setUpGraph(self):
         self.plot = pg.PlotWidget(alpha=0.75)
-	#self.p1 = self.plot.plotItem
+        #self.p1 = self.plot.plotItem
         layout = QGridLayout()
         self.ui.widget.setLayout(layout)
-	layout.addWidget(self.plot,0,0)	
-	self.plot.showGrid(1,1)
-	#self.pg_item = self.plot.getPlotItem()
+        layout.addWidget(self.plot,0,0)    
+        self.plot.showGrid(1,1)
+        #self.pg_item = self.plot.getPlotItem()
         #self.curve = pg.PlotCurveItem(pen='o')
         #self.curve=self.plot.plot()
         #self.plot.addItem(self.curve)
 
     def loadStyleSheet(self):
-	try:
+        try:
             self.cssfile = "/home/physics/zimmerc/python/style.css"
             with open(self.cssfile,"r") as f:
                 self.setStyleSheet(f.read())
         except:
+            print "Error loading style sheet"
             pass
 
     def create_status_bar(self):
@@ -116,37 +147,35 @@ class RTBSA(QMainWindow):
         self.statusBar().addWidget(self.status_text, 1)
         self.statusBar().setPalette(palette)        
 
-    def search1(self):
-        self.ui.listWidget.clear()
-        query=str(self.ui.enter1.text())
+    def search(self, enter, widget):
+        widget.clear()
+        query=str(enter.text())
         for pv in self.bsapvs:
             if query.lower() in pv.lower():
-                self.ui.listWidget.addItem(pv)
+                widget.addItem(pv)
+    
+    def search1(self):
+        search(self.ui.enter1, self.ui.listWidget)
+        
+    def search2(self):
+        search(self.ui.enter2, self.ui.listWidget_2)
 
-    def setenter1(self):
-        selection=self.ui.listWidget.currentItem()
-        self.ui.enter1.textChanged.disconnect()
-        self.ui.enter1.setText(selection.text())
-        QObject.connect(self.ui.enter1, SIGNAL("textChanged(const QString&)"), self.search1)
-        if self.abort==False and self.ui.enter1_rb.isChecked():
+    def setEnter(self, widget, enter, search, enter_rb):
+        selection = widget.currentItem()
+        enter.textChanged.disconnect()
+        enter.setText(selection.text())
+        QObject.connect(enter, SIGNAL("textChanged(const QString&)"), search)
+        if self.abort==False and enter_rb.isChecked():
             self.stop()
             self.on_draw()
-
-    def search2(self):
-        self.ui.listWidget_2.clear()
-        query=str(self.ui.enter2.text())
-        for pv in self.bsapvs:
-            if query.lower() in pv.lower():
-                self.ui.listWidget_2.addItem(pv)
+    
+    def setenter1(self):
+        setEnter(self.ui.listWidget, self.ui.enter1, self.search1,
+                 self.ui.enter1_rb)
 
     def setenter2(self):
-        selection=self.ui.listWidget_2.currentItem()
-        self.ui.enter2.textChanged.disconnect()
-        self.ui.enter2.setText(selection.text())
-        QObject.connect(self.ui.enter2, SIGNAL("textChanged(const QString&)"), self.search2)
-        if self.abort==False and self.ui.enter2_rb.isChecked():
-            self.stop()
-            self.on_draw()
+        setEnter(self.ui.listWidget_2, self.ui.enter2, self.search2,
+                 self.ui.enter2_rb)
 
     def points_entered(self):
         try:
@@ -156,6 +185,7 @@ class RTBSA(QMainWindow):
             self.numpoints=120
             self.ui.points.setText('120')
             return
+        
         if self.numpoints > 2800:
             self.statusBar().showMessage('Max # points is 2800',6000)
             self.numpoints=2800
@@ -174,127 +204,187 @@ class RTBSA(QMainWindow):
             return
         else:
             self.stop()
+            
+    def appendToPvList(self, common_rb, common, enter_rb, enter, device):
+        success = True
+        
+        if common_rb.isChecked():
+            self.pvlist.append(str(common.currentText()+'HSTBR'))
+            
+        elif enter_rb.isChecked():
+            if str(enter.text()).strip():
+                self.pvlist.append(str(enter.text())+'HSTBR')
+            else:
+                self.statusBar().showMessage('Device '+ device 
+                                             + ' field blank. Aborting.', 10000)
+                self.ui.draw_button.setEnabled(True)
+                success = False
+            
+        return success
+        
+    def setValSynced(self):
+    
+        numBadShots = round((self.time2 - self.time1)*self.rate.value)
+        
+        val1synced = self.val1pre[max(0, numBadShots)
+                                  :min(2800, 2800 + numBadShots)]
+        val2synced = self.val2pre[max(0, -numBadShots)
+                                  :min(2800, 2800 - numBadShots)]
+            
+        return [abs(numBadShots), val1synced, val2synced]
+        
+    def updateRate(self):
+        rate = self.rate.value
+        while rate not in [120.0, 60.0, 30.0, 10.0]:
+            QApplication.processEvents()
+            rate = self.rate.value
+        return rate
  
-    def on_draw(self): #Where the magic happens(well, where it starts to happen).  This initializes the BSA plotting and then starts a timer to update the plot.
-        if not (self.ui.AvsT_cb.isChecked() or self.ui.AvsB.isChecked() or self.ui.AFFT.isChecked()):
-            self.statusBar().showMessage('Pick a Plot Type (PV vs. time or B vs A)',10000)
+    # Where the magic happens(well, where it starts to happen). This initializes
+    # the BSA plotting and then starts a timer to update the plot.
+    def on_draw(self):
+        plotTypeIsValid = (self.ui.AvsT_cb.isChecked() or self.ui.AvsB.isChecked()
+                           or self.ui.AFFT.isChecked()) 
+        
+        if not plotTypeIsValid:
+            self.statusBar().showMessage('Pick a Plot Type (PV vs. time or B vs A)',
+                                         10000)
             return
+            
         self.ui.draw_button.setDisabled(True)
         self.plot.clear()
         self.abort=False
+        
         self.avg_text=pg.TextItem('', color=(200,200,250),anchor=(0,1))
         self.std_text=pg.TextItem('', color=(200,200,250),anchor=(0,1))
         self.slope_text=pg.TextItem('', color=(200,200,250),anchor=(0,1))
         self.corr_text=pg.TextItem('', color=(200,200,250),anchor=(0,1))
-        for plotlabels in [self.avg_text,self.std_text,self.slope_text,self.corr_text]:
-            self.plot.addItem(plotlabels)
-        if self.ui.AvsT_cb.isChecked():####Plot history buffer for one PV####
-	    self.statusBar().showMessage('Initializing...')
+
+        plotLabels = [self.avg_text,self.std_text,self.slope_text,self.corr_text]
+        for plotLabel in plotLabels:
+            self.plot.addItem(plotLabel)
+            
+        ####Plot history buffer for one PV####
+        if self.ui.AvsT_cb.isChecked():
+            self.statusBar().showMessage('Initializing...')
             if self.ui.common1_rb.isChecked():
                 self.device = str(self.ui.common1.currentText()+'HSTBR')
             elif self.ui.enter1_rb.isChecked():
                 self.device = str(self.ui.enter1.text()+'HSTBR')
                 if len(str(self.ui.enter1.text()).strip())==0:
-                    self.statusBar().showMessage('Device A field blank. Aborting.', 10000)
+                    self.statusBar().showMessage('Device A field blank. Aborting.',
+                                                 10000)
                     self.ui.draw_button.setEnabled(True)
                     return    
-            getdata=Popen("caget "+self.device,stdout=PIPE,shell=True)
+            
+            getdata=Popen("caget " + self.device, stdout=PIPE, shell=True)
             newdata=str(getdata.communicate()).split()[2:-1]
             newdata[-1]=newdata[-1][:-4]
             newdata=[float(i) for i in newdata]
-            #newdata=caget(self.device)#Using pyepics caget causes progressive slowdown of GUI!?!?
+            
+            # Using pyepics caget causes progressive slowdown of GUI!?!?
+            #newdata=caget(self.device)
+            
             if str(newdata) == 'None':
-                self.statusBar().showMessage('Invalid PV?  Unable to get data. Aborting.', 10000)
+                self.statusBar().showMessage('Invalid PV? Unable to get data. Aborting.',
+                                             10000)
                 self.ui.draw_button.setEnabled(True)
                 return
             try:
-                self.curve = pg.PlotCurveItem(newdata[2800-self.numpoints:2800],pen=1)
+                self.curve = pg.PlotCurveItem(newdata[2800-self.numpoints:2800],
+                                              pen=1)
                 self.plot.addItem(self.curve)
                 self.plot.setTitle(self.device)
                 self.xdata=range(self.numpoints)
-                if self.ui.line_cb.isChecked():#Fit line
-                    (m,b)=polyfit(self.xdata,newdata[2800-self.numpoints:2800],1)
+                
+                #Fit line
+                if self.ui.line_cb.isChecked():
+                    (m,b)=polyfit(self.xdata, newdata[2800-self.numpoints:2800], 1)
                     fitdata=polyval([m,b],self.xdata)
                     m="{:.3e}".format(m)
-                    self.slope_text.setText('Slope: '+str(m))    
-                    self.fit=pg.PlotCurveItem(self.xdata,fitdata,'g-',linewidth=1)
-                elif self.ui.parab_cb.isChecked():#Fit polynomial
-                    co = polyfit(self.xdata,newdata[2800-self.numpoints:2800],self.fitorder)
+                    self.slope_text.setText('Slope: ' + str(m))    
+                    self.fit=pg.PlotCurveItem(self.xdata,fitdata, 'g-',
+                                              linewidth = 1)
+                
+                #Fit polynomial
+                elif self.ui.parab_cb.isChecked():
+                    co = polyfit(self.xdata, newdata[2800-self.numpoints:2800],
+                                 self.fitorder)
                     pol = poly1d(co)
                     fit=pol(self.xdata)
                     self.parab=pg.PlotCurveItem(self.xdata,fit,pen=3)
                     self.plot.addItem(self.parab)
-                    if self.fitorder==2:
+                    if self.fitorder == 2:
                         self.slope_text.setText('Peak: '+str(-co[1]/(2*co[0])))
             except UnboundLocalError:
-                self.statusBar().showMessage('No Data, Aborting Plotting Algorithm', 10000)
+                self.statusBar().showMessage('No Data, Aborting Plotting Algorithm',
+                                             10000)
                 return
-	    self.statusBar().showMessage('Running')
+                
+            self.statusBar().showMessage('Running')
             self.timer=QTimer(self)
             self.timer.singleShot(self.updatetime,self.update_plot_HSTBR)
-        elif self.ui.AvsB.isChecked(): ####Plot for 2 PVs####
+        
+        ####Plot for 2 PVs####
+        elif self.ui.AvsB.isChecked(): 
             self.pvlist=[]
-            if self.ui.common1_rb.isChecked():
-                self.pvlist.append(str(self.ui.common1.currentText()+'HSTBR'))
-            elif self.ui.enter1_rb.isChecked():
-                if len(str(self.ui.enter1.text()).strip())==0:
-                    self.statusBar().showMessage('Device A field blank. Aborting.', 10000)
-                    self.ui.draw_button.setEnabled(True)
-                    return
-                self.pvlist.append(str(self.ui.enter1.text())+'HSTBR')              
-            if self.ui.common2_rb.isChecked():
-                self.pvlist.append(str(self.ui.common2.currentText()+'HSTBR'))
-            elif self.ui.enter2_rb.isChecked():
-                if len(str(self.ui.enter2.text()).strip())==0:
-                    self.statusBar().showMessage('Device B field blank. Aborting.', 10000)
-                    self.ui.draw_button.setEnabled(True)
-                    return
-                self.pvlist.append(str(self.ui.enter2.text())+'HSTBR')
-            self.val1,self.val2=[],[]
-            self.val1pv=PV(self.pvlist[0], form='time')
-            self.val2pv=PV(self.pvlist[1], form='time')
-            self.statusBar().showMessage('Initializing/Syncing (be patient, may take 5 seconds)...')
-            self.time1,self.time2=1,2
-            rate=self.rate.value
-            numBadShots=0
-            while rate != 120.0 and rate != 60.0 and rate != 30.0 and rate != 10.0:
-                QApplication.processEvents()
-                rate=self.rate.value
-            self.booyah,self.booyah2=self.val1pv.add_callback(self.ItDoneChanged),self.val2pv.add_callback(self.ItDoneChanged2)
+            
+            if not self.appendToPvList(self.ui.common1_rb, self.ui.common1,
+                                       self.ui.enter1_rb, self.ui.enter1, "A"):
+                return
+                              
+            if not self.appendToPvList(self.ui.common2_rb, self.ui.common2,
+                                       self.ui.enter2_rb, self.ui.enter2, "B"):
+                return
+            
+            self.val1, self.val2 = [], []
+            
+            self.val1pv = PV(self.pvlist[0], form='time')
+            self.val2pv = PV(self.pvlist[1], form='time')
+            
+            self.statusBar().showMessage('Initializing/Syncing (be patient, '
+                                         + 'may take 5 seconds)...')
+            
+            self.time1, self.time2 = 1, 2
+            rate = self.rate.value
+            numBadShots = 0
+            
+            # Are there other rates besides 0 and 1?
+            rate = self.updateRate()
+                
+            self.booyah = self.val1pv.add_callback(self.ItDoneChanged) 
+            self.booyah2 = self.val2pv.add_callback(self.ItDoneChanged2)
+            
             while (self.time1 == 1 or self.time2 == 2) and self.abort==False:
                 QApplication.processEvents()
-            if(self.time1 < self.time2):
-                numBadShots = round((self.time2 - self.time1)*self.rate.value)
-                val1synced = self.val1pre[numBadShots:2800]	 
-                val2synced = self.val2pre[0:2800-numBadShots]	 
-            elif(self.time2 < self.time1):	 
-                numBadShots = round((self.time1 - self.time2)*self.rate.value)	 
-                val2synced = self.val2pre[numBadShots:2800]	 
-                val1synced = self.val1pre[0:2800-numBadShots]	
-            else:
-                val1synced,val2synced=self.val1pre,self.val2pre
+                
+            numBadShots, val1synced, val2synced = self.setValSynced()
+                
             blength = 2800 - numBadShots
             if (self.numpoints <= blength):
-                self.val1 = val1synced[blength-self.numpoints:blength]	 
+                self.val1 = val1synced[blength-self.numpoints:blength]     
                 self.val2 = val2synced[blength-self.numpoints:blength]
             else:
                 self.val1=val1synced
                 self.val2=val2synced
+            
             if self.abort==True:
                 return
+            
             try:
                 self.curve = pg.ScatterPlotItem(self.val1,self.val2,pen=1,symbol='x',size=5)
                 self.plot.addItem(self.curve)
                 self.plot.setTitle(self.pvlist[1]+' vs. '+self.pvlist[0])
                 if self.ui.line_cb.isChecked():
                     self.fit=pg.PlotCurveItem(pen=3)
-		    try:
+                    try:
                         (m,b)=polyfit(self.val1,self.val2,1)
                         fitdata=polyval([m,b],self.val1)
                         m="{:.3e}".format(m)
                         self.slope_text.setText('Slope: '+str(m))    
                         self.fit.setData(self.val1,fitdata)
                     except:
+                        print "Error getting line fit"
                         pass
                     self.plot.addItem(self.fit)
                 elif self.ui.parab_cb.isChecked():
@@ -308,30 +398,40 @@ class RTBSA(QMainWindow):
                         if self.fitorder==2:
                             self.slope_text.setText('Peak: '+str(-co[1]/(2*co[0])))
                     except np.linalg.linalg.LinAlgError:
+                        print "Linear algebra error getting curve fit"
                         pass
                     self.plot.addItem(self.parab)
             except UnboundLocalError:
-                self.statusBar().showMessage('No Data, Aborting Plotting Algorithm', 10000)
+                self.statusBar().showMessage('No Data, Aborting Plotting Algorithm',
+                                             10000)
                 return
-		
+        
             self.timer=QTimer(self)
             self.timer.singleShot(self.updatetime,self.update_BSA_Plot)
             self.statusBar().showMessage('Running')
-        else: ####Plot power spectrum####
+        
+        ####Plot power spectrum####
+        else: 
             if self.ui.common1_rb.isChecked():
                 self.device = str(self.ui.common1.currentText()+'HSTBR')
+            
             elif self.ui.enter1_rb.isChecked():
-                if len(str(self.ui.enter1.text()).strip())==0:
-                    self.statusBar().showMessage('Device A field blank. Aborting.', 10000)
+                if str(self.ui.enter1.text()).strip():
+                    self.device = (str(self.ui.enter1.text())+'HSTBR')
+                else:
+                    self.statusBar().showMessage('Device A field blank. Aborting.',
+                                                 10000)
                     self.ui.draw_button.setEnabled(True)
                     return
-                self.device = (str(self.ui.enter1.text())+'HSTBR')            
-            getdata=Popen("caget "+self.device,stdout=PIPE,shell=True)
-            newdata=str(getdata.communicate()).split()[2:-1]
-            newdata[-1]=newdata[-1][:-4]
-            newdata=[float(i) for i in newdata]
+                          
+            getdata = Popen("caget "+self.device,stdout=PIPE,shell=True)
+            newdata = str(getdata.communicate()).split()[2:-1]
+            newdata[-1] = newdata[-1][:-4]
+            newdata = [float(i) for i in newdata]
+            
             if self.abort==True:
                 return
+                
             try:
                 newdata = newdata[2800-self.numpoints:2800]
                 newdata.extend(np.zeros(self.numpoints*2).tolist())
@@ -344,12 +444,14 @@ class RTBSA(QMainWindow):
                 ps = ps[self.keep]
                 self.freqs = self.freqs[self.keep]
                 self.idx = np.argsort(self.freqs)
-                self.curve = pg.PlotCurveItem(x = self.freqs[self.idx], y= ps[self.idx],pen=1)
+                self.curve = pg.PlotCurveItem(x = self.freqs[self.idx],
+                                              y= ps[self.idx],pen=1)
                 self.plot.addItem(self.curve)
                 self.plot.setTitle(self.device)
                 #self.plot.setTitle(self.pvlist[1]+' vs. '+self.pvlist[0])
             except UnboundLocalError:
-                self.statusBar().showMessage('No Data, Aborting Plotting Algorithm', 10000)
+                self.statusBar().showMessage('No Data, Aborting Plotting Algorithm',
+                                             10000)
                 return
             self.timer=QTimer(self)
             self.timer.singleShot(self.updatetime,self.update_plot_FFT)
@@ -359,39 +461,32 @@ class RTBSA(QMainWindow):
         QApplication.processEvents()
         if self.abort==True:
             return
-	self.plot.showGrid(self.ui.grid_cb.isChecked(),self.ui.grid_cb.isChecked())
+        self.plot.showGrid(self.ui.grid_cb.isChecked(),self.ui.grid_cb.isChecked())
         numBadShots = 0
-        rate=self.rate.value
-        while rate != 120.0 and rate != 60.0 and rate != 30.0 and rate != 10.0:
-            QApplication.processEvents()
-            rate=self.rate.value
-        if(self.time1 < self.time2):
-            numBadShots = round((self.time2 - self.time1)*self.rate.value)#Shuffle buffers to sync shots, based on beam rate
-            val1synced = self.val1pre[numBadShots:2800]	 
-            val2synced = self.val2pre[0:2800-numBadShots]	 
-        elif(self.time2 < self.time1):	 
-            numBadShots = round((self.time1 - self.time2)*self.rate.value)	 
-            val2synced = self.val2pre[numBadShots:2800]	 
-            val1synced = self.val1pre[0:2800-numBadShots]
-        else:
-            val1synced,val2synced=self.val1pre,self.val2pre	 
+        rate = self.rate.value
+        
+        rate = self.updateRate()
+        
+        numBadShots, val1synced, val2synced = self.setValSynced()
+             
         blength = 2800 - numBadShots
         if (self.numpoints <= blength):
-            self.val1 = val1synced[blength-self.numpoints:blength]	 
+            self.val1 = val1synced[blength-self.numpoints:blength]     
             self.val2 = val2synced[blength-self.numpoints:blength]
         else:
             self.val1=val1synced
             self.val2=val2synced
-	#Filter out NaNs and ridiculous BLEN values
-	elements_to_use = np.ones(len(self.val2), dtype=bool)
-	elements_to_use = np.logical_and(elements_to_use, np.logical_not(np.isnan(self.val2)))
-	elements_to_use = np.logical_and(elements_to_use, np.logical_not(np.isnan(self.val1)))
-	if "BLEN:LI24:886" in self.pvlist[1]:
-		elements_to_use = np.logical_and(elements_to_use, np.logical_not(self.val2 > 12000))
-	if "BLEN:LI24:886" in self.pvlist[0]:
-		elements_to_use = np.logical_and(elements_to_use, np.logical_not(self.val1 > 12000))
-	self.val1 = self.val1[elements_to_use]
-	self.val2 = self.val2[elements_to_use]
+        
+        #Filter out NaNs and ridiculous BLEN values
+        elements_to_use = np.ones(len(self.val2), dtype=bool)
+        elements_to_use = np.logical_and(elements_to_use, np.logical_not(np.isnan(self.val2)))
+        elements_to_use = np.logical_and(elements_to_use, np.logical_not(np.isnan(self.val1)))
+        if "BLEN:LI24:886" in self.pvlist[1]:
+            elements_to_use = np.logical_and(elements_to_use, np.logical_not(self.val2 > 12000))
+        if "BLEN:LI24:886" in self.pvlist[0]:
+            elements_to_use = np.logical_and(elements_to_use, np.logical_not(self.val1 > 12000))
+        self.val1 = self.val1[elements_to_use]
+        self.val2 = self.val2[elements_to_use]
         self.curve.setData(self.val1,self.val2)
         if self.ui.autoscale_cb.isChecked():
             mx=np.max(self.val2)
@@ -441,7 +536,7 @@ class RTBSA(QMainWindow):
         self.timer.singleShot(self.updatetime,self.update_BSA_Plot)
 
     def update_plot_HSTBR(self):
-	self.plot.showGrid(self.ui.grid_cb.isChecked(),self.ui.grid_cb.isChecked())
+        self.plot.showGrid(self.ui.grid_cb.isChecked(), self.ui.grid_cb.isChecked())
         QApplication.processEvents()
         if self.abort==True:
             return
@@ -495,7 +590,7 @@ class RTBSA(QMainWindow):
         self.timer.singleShot(40,self.update_plot_HSTBR)
 
     def update_plot_FFT(self):
-    	self.plot.showGrid(self.ui.grid_cb.isChecked(),self.ui.grid_cb.isChecked())
+        self.plot.showGrid(self.ui.grid_cb.isChecked(),self.ui.grid_cb.isChecked())
         QApplication.processEvents()
         if self.abort==True:
             return
@@ -526,13 +621,15 @@ class RTBSA(QMainWindow):
                 self.plot.setXRange(min(self.freqs),max(self.freqs))
         self.timer.singleShot(40, self.update_plot_FFT)
     
-    def ItDoneChanged(self,pvname=None,value=None,timestamp=None,**kw):#Callback function for PV1
-	self.time1=timestamp
-        self.val1pre=value	
+    #Callback function for PV1
+    def ItDoneChanged(self,pvname=None,value=None,timestamp=None,**kw):
+        self.time1=timestamp
+        self.val1pre=value    
 
-    def ItDoneChanged2(self,pvname=None,value=None,timestamp=None,**kw):#Callback function for PV2
-	self.time2=timestamp
-	self.val2pre=value
+    #Callback function for PV2
+    def ItDoneChanged2(self,pvname=None,value=None,timestamp=None,**kw):
+        self.time2=timestamp
+        self.val2pre=value
 
     def AvsTClick(self):
         palette=QPalette()
@@ -542,7 +639,7 @@ class RTBSA(QMainWindow):
             self.ui.AvsB.setChecked(False)
             self.ui.AFFT.setChecked(False)
             self.AvsBClick()
-	    
+        
     def AvsBClick(self):
         if not self.ui.AvsB.isChecked():
             self.ui.groupBox_2.setDisabled(True)
@@ -902,6 +999,6 @@ def main():
     sys.exit(app.exec_())
     
 if __name__ == "__main__":
-	main()
+    main()
 
 
