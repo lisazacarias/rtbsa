@@ -334,6 +334,18 @@ class RTBSA(QMainWindow):
         self.timer=QTimer(self)
         self.timer.singleShot(self.updatetime, self.update_plot_HSTBR)
         
+    def adjustVals(self):
+        self.updateRate()
+        numBadShots, val1synced, val2synced = self.setValSynced()
+            
+        blength = 2800 - numBadShots
+        if (self.numpoints <= blength):
+            self.val1 = val1synced[blength-self.numpoints:blength]     
+            self.val2 = val2synced[blength-self.numpoints:blength]
+        else:
+            self.val1=val1synced
+            self.val2=val2synced
+        
     def updateValsFromInput(self):
         self.pvlist = []
             
@@ -354,11 +366,9 @@ class RTBSA(QMainWindow):
                                      + 'may take 5 seconds)...')
         
         self.time1, self.time2 = 1, 2
-        rate = self.rate.value
-        numBadShots = 0
         
         # Are there other rates besides 0 and 1?
-        rate = self.updateRate()
+        
             
         self.booyah = self.val1pv.add_callback(self.ItDoneChanged) 
         self.booyah2 = self.val2pv.add_callback(self.ItDoneChanged2)
@@ -366,16 +376,11 @@ class RTBSA(QMainWindow):
         while (self.time1 == 1 or self.time2 == 2) and not self.abort:
             QApplication.processEvents()
             
-        numBadShots, val1synced, val2synced = self.setValSynced()
+        self.adjustVals()
             
-        blength = 2800 - numBadShots
-        if (self.numpoints <= blength):
-            self.val1 = val1synced[blength-self.numpoints:blength]     
-            self.val2 = val2synced[blength-self.numpoints:blength]
-        else:
-            self.val1=val1synced
-            self.val2=val2synced
     
+    # TODO This is near identical to plotFit - I'll ask Chris if the differences
+    # are necessary
     def genABPlot(self):
         self.curve = pg.ScatterPlotItem(self.val1, self.val2, pen=1, symbol='x',
                                         size=5)
@@ -421,6 +426,42 @@ class RTBSA(QMainWindow):
                 pass
             self.plot.addItem(self.parab)
     
+    def genFFTPlot(self):
+        newdata = self.initialzeData()
+        newdata = newdata[2800-self.numpoints:2800]
+        newdata.extend(np.zeros(self.numpoints*2).tolist())
+        newdata = newdata - np.mean(newdata);
+        #ps = np.log(np.abs(np.fft.fft(newdata[2800-self.numpoints:2800]))
+                    #/self.numpoints)
+        ps = np.abs(np.fft.fft(newdata))/len(newdata)
+        self.FS = self.rate.value
+        self.freqs = np.fft.fftfreq(len(newdata), 1.0/self.FS)
+        self.keep = self.freqs >= 0
+        ps = ps[self.keep]
+        self.freqs = self.freqs[self.keep]
+        self.idx = np.argsort(self.freqs)
+        self.curve = pg.PlotCurveItem(x = self.freqs[self.idx],
+                                      y= ps[self.idx], pen=1)
+        self.plot.addItem(self.curve)
+        self.plot.setTitle(self.device)
+        #self.plot.setTitle(self.pvlist[1]+' vs. '+self.pvlist[0])
+    
+    def genPlotAndSetTimer(self, genPlot):
+        if self.abort:
+            return False
+            
+        try:
+            genPlot()
+        except UnboundLocalError:
+            self.statusBar().showMessage('No Data, Aborting Plotting Algorithm',
+                                         10000)
+            return False
+    
+        self.timer=QTimer(self)
+        self.timer.singleShot(self.updatetime, self.update_BSA_Plot)
+        self.statusBar().showMessage('Running')
+        return True
+    
     # Where the magic happens(well, where it starts to happen). This initializes
     # the BSA plotting and then starts a timer to update the plot.
     def on_draw(self):
@@ -445,68 +486,13 @@ class RTBSA(QMainWindow):
         elif self.ui.AvsB.isChecked(): 
             self.updateValsFromInput()
             
-            if self.abort:
+            if not self.genPlotAndSetTimer(self.genABPlot):
                 return
-            
-            try:
-                self.genABPlot()
-            except UnboundLocalError:
-                self.statusBar().showMessage('No Data, Aborting Plotting Algorithm',
-                                             10000)
-                return
-        
-            self.timer=QTimer(self)
-            self.timer.singleShot(self.updatetime, self.update_BSA_Plot)
-            self.statusBar().showMessage('Running')
         
         ####Plot power spectrum####
         else: 
-            if self.ui.common1_rb.isChecked():
-                self.device = str(self.ui.common1.currentText() + 'HSTBR')
-            
-            elif self.ui.enter1_rb.isChecked():
-                if str(self.ui.enter1.text()).strip():
-                    self.device = (str(self.ui.enter1.text()) + 'HSTBR')
-                else:
-                    self.statusBar().showMessage('Device A field blank. Aborting.',
-                                                 10000)
-                    self.ui.draw_button.setEnabled(True)
-                    return
-                          
-            getdata = Popen("caget " + self.device, stdout=PIPE, shell=True)
-            newdata = str(getdata.communicate()).split()[2:-1]
-            newdata[-1] = newdata[-1][:-4]
-            newdata = [float(i) for i in newdata]
-            
-            if self.abort:
+            if not self.genPlotAndSetTimer(self.genFFTPlot):
                 return
-                
-            try:
-                newdata = newdata[2800-self.numpoints:2800]
-                newdata.extend(np.zeros(self.numpoints*2).tolist())
-                newdata = newdata - np.mean(newdata);
-             #  ps = np.log(np.abs(np.fft.fft(newdata[2800-self.numpoints:2800]))/self.numpoints)
-                ps = np.abs(np.fft.fft(newdata))/len(newdata)
-                self.FS = self.rate.value
-                self.freqs = np.fft.fftfreq(len(newdata), 1.0/self.FS)
-                self.keep = self.freqs >= 0
-                ps = ps[self.keep]
-                self.freqs = self.freqs[self.keep]
-                self.idx = np.argsort(self.freqs)
-                self.curve = pg.PlotCurveItem(x = self.freqs[self.idx],
-                                              y= ps[self.idx], pen=1)
-                self.plot.addItem(self.curve)
-                self.plot.setTitle(self.device)
-                #self.plot.setTitle(self.pvlist[1]+' vs. '+self.pvlist[0])
-                
-            except UnboundLocalError:
-                self.statusBar().showMessage('No Data, Aborting Plotting Algorithm',
-                                             10000)
-                return
-                
-            self.timer = QTimer(self)
-            self.timer.singleShot(self.updatetime, self.update_plot_FFT)
-            self.statusBar().showMessage('Running')
     
     def update_BSA_Plot(self):
         QApplication.processEvents()
@@ -515,21 +501,9 @@ class RTBSA(QMainWindow):
             return
             
         self.plot.showGrid(self.ui.grid_cb.isChecked(),
-               self.ui.grid_cb.isChecked())
-        numBadShots = 0
-        rate = self.rate.value
+                           self.ui.grid_cb.isChecked())
         
-        rate = self.updateRate()
-        
-        numBadShots, val1synced, val2synced = self.setValSynced()
-             
-        blength = 2800 - numBadShots
-        if (self.numpoints <= blength):
-            self.val1 = val1synced[blength-self.numpoints:blength]     
-            self.val2 = val2synced[blength-self.numpoints:blength]
-        else:
-            self.val1=val1synced
-            self.val2=val2synced
+        self.adjustVals()
         
         #Filter out NaNs and ridiculous BLEN values
         elements_to_use = np.ones(len(self.val2), dtype=bool)
@@ -621,7 +595,7 @@ class RTBSA(QMainWindow):
     def update_plot_HSTBR(self):
         
         self.plot.showGrid(self.ui.grid_cb.isChecked(),
-               self.ui.grid_cb.isChecked())
+                           self.ui.grid_cb.isChecked())
         
         QApplication.processEvents()
         
