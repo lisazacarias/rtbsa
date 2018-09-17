@@ -245,9 +245,9 @@
                     <colorrole role="WindowText">
                      <brush brushstyle="SolidPattern">
                       <color alpha="255">
-                       <red>146</red>
-                       <green>145</green>
-                       <blue>144</blue>
+                       <red>0</red>
+                       <green>255</green>
+                       <blue>0</blue>
                       </color>
                      </brush>
                     </colorrole>
@@ -265,9 +265,9 @@
                     <colorrole role="WindowText">
                      <brush brushstyle="SolidPattern">
                       <color alpha="255">
-                       <red>146</red>
-                       <green>145</green>
-                       <blue>144</blue>
+                       <red>0</red>
+                       <green>255</green>
+                       <blue>0</blue>
                       </color>
                      </brush>
                     </colorrole>
@@ -325,9 +325,9 @@
                     <colorrole role="Text">
                      <brush brushstyle="SolidPattern">
                       <color alpha="255">
-                       <red>165</red>
-                       <green>164</green>
-                       <blue>164</blue>
+                       <red>0</red>
+                       <green>255</green>
+                       <blue>0</blue>
                       </color>
                      </brush>
                     </colorrole>
@@ -336,9 +336,9 @@
                     <colorrole role="Text">
                      <brush brushstyle="SolidPattern">
                       <color alpha="255">
-                       <red>165</red>
-                       <green>164</green>
-                       <blue>164</blue>
+                       <red>0</red>
+                       <green>255</green>
+                       <blue>0</blue>
                       </color>
                      </brush>
                     </colorrole>
@@ -489,7 +489,7 @@
                 <string>Plot A vs Time</string>
                </property>
                <property name="checked">
-                <bool>true</bool>
+                <bool>false</bool>
                </property>
               </widget>
              </item>
@@ -502,6 +502,9 @@
                </property>
                <property name="text">
                 <string>Plot B vs A</string>
+               </property>
+               <property name="checked">
+                <bool>true</bool>
                </property>
               </widget>
              </item>
