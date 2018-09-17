@@ -1,5 +1,5 @@
 #!/usr/local/lcls/package/python/current/bin/python
-# Written by Zimmer, modified by Lisa
+# Written by Zimmer, refactored by Lisa
 
 import sys
 
@@ -13,7 +13,7 @@ from subprocess import CalledProcessError
 
 from logbook import *
 
-from rtbsa_ui import Ui_RTBSA as BSA_UI
+from rtbsa_ui import Ui_RTBSA
 
 from Constants import *
 
@@ -21,7 +21,7 @@ from Constants import *
 class RTBSA(QMainWindow):
     def __init__(self, parent=None):
         QMainWindow.__init__(self, parent)
-        self.ui = BSA_UI()
+        self.ui = Ui_RTBSA()
         self.ui.setupUi(self)
         self.setWindowTitle('Real Time BSA')
         self.loadStyleSheet()
@@ -37,13 +37,13 @@ class RTBSA(QMainWindow):
 
         # Generate list of BSA PVS
         try:
-            updatedBSAPVs = check_output(['eget', '-ts', 'ds', '-a',
-                                          'tag=LCLS.BSA.rootnames']).splitlines()[
-                            1:-1]
-            self.bsapvs = self.bsapvs + updatedBSAPVs
+            egetBSAPVs = check_output(['eget', '-ts', 'ds', '-a',
+                                       'tag=LCLS.BSA.rootnames']).splitlines()[1:-1]
+            self.bsapvs = self.bsapvs + egetBSAPVs
 
         # Backup for timeout error
         except CalledProcessError:
+            print "Unable to pull most recent PV list"
             self.bsapvs = self.bsapvs + bsapvs
 
         for pv in self.bsapvs:
@@ -101,8 +101,7 @@ class RTBSA(QMainWindow):
         self.timer = QTimer(self)
 
         self.rate = PV('EVNT:SYS0:1:LCLSBEAMRATE')
-        self.menuBar().setStyleSheet(
-            'QWidget{background-color:grey;color:purple}')
+        self.menuBar().setStyleSheet('QWidget{background-color:grey;color:purple}')
         self.create_menu()
         self.create_status_bar()
 
@@ -196,11 +195,12 @@ class RTBSA(QMainWindow):
             self.pvlist.append(str(common.currentText() + 'HSTBR'))
 
         elif enter_rb.isChecked():
-            if str(enter.text()).strip():
+            pv = str(enter.text()).strip()
+            if pv and pv in self.bsapvs:
                 self.pvlist.append(str(enter.text()) + 'HSTBR')
             else:
                 self.statusBar().showMessage('Device ' + device
-                                             + ' field blank. Aborting.', 10000)
+                                             + ' invalid. Aborting.', 10000)
                 self.ui.draw_button.setEnabled(True)
                 success = False
 
@@ -210,6 +210,8 @@ class RTBSA(QMainWindow):
 
         numBadShots = round((self.time2 - self.time1) * self.rate.value)
 
+        # Gets opposite indices depending on which is greater (and 0 if they're
+        # equal)
         val1synced = self.val1pre[max(0, numBadShots)
                                   :min(2800, 2800 + numBadShots)]
         val2synced = self.val2pre[max(0, -numBadShots)
@@ -254,8 +256,11 @@ class RTBSA(QMainWindow):
             self.device = str(self.ui.common1.currentText() + 'HSTBR')
 
         elif self.ui.enter1_rb.isChecked():
-            if str(self.ui.enter1.text()).strip():
+            pv = str(self.ui.enter1.text()).strip()
+            if pv and pv in self.bsapvs:
                 self.device = str(self.ui.enter1.text() + 'HSTBR')
+            else:
+                return None
         else:
             return None
 
@@ -320,11 +325,11 @@ class RTBSA(QMainWindow):
 
         if not self.appendToPvList(self.ui.common1_rb, self.ui.common1,
                                    self.ui.enter1_rb, self.ui.enter1, "A"):
-            return
+            return False
 
         if not self.appendToPvList(self.ui.common2_rb, self.ui.common2,
                                    self.ui.enter2_rb, self.ui.enter2, "B"):
-            return
+            return False
 
         self.val1, self.val2 = [], []
 
@@ -343,6 +348,7 @@ class RTBSA(QMainWindow):
             QApplication.processEvents()
 
         self.adjustVals()
+        return True
 
     def getLinearFit(self, xdata, ydata, updateExistingPlot):
         try:
@@ -406,6 +412,10 @@ class RTBSA(QMainWindow):
 
     def genFFTPlot(self):
         newdata = self.initialzeData()
+
+        if not newdata:
+            return
+
         newdata = newdata[2800 - self.numpoints:2800]
         newdata.extend(np.zeros(self.numpoints * 2).tolist())
         newdata = newdata - np.mean(newdata);
@@ -461,9 +471,8 @@ class RTBSA(QMainWindow):
 
         ####Plot for 2 PVs####
         elif self.ui.AvsB.isChecked():
-            self.updateValsFromInput()
-
-            if not self.genPlotAndSetTimer(self.genABPlot):
+            if (not self.updateValsFromInput()
+                    or not self.genPlotAndSetTimer(self.genABPlot)):
                 return
 
         ####Plot power spectrum####
