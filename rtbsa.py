@@ -17,6 +17,8 @@ from rtbsa_ui import Ui_RTBSA
 
 from Constants import *
 
+from itertools import compress
+
 
 class RTBSA(QMainWindow):
     def __init__(self, parent=None):
@@ -28,12 +30,12 @@ class RTBSA(QMainWindow):
         self.setUpGraph()
 
         QObject.connect(self.ui.enter1, SIGNAL("textChanged(const QString&)"),
-                        self.search1)
+                        self.searchA)
         QObject.connect(self.ui.enter2, SIGNAL("textChanged(const QString&)"),
-                        self.search2)
+                        self.searchB)
 
-        self.ui.listWidget.itemClicked.connect(self.setenter1)
-        self.ui.listWidget_2.itemClicked.connect(self.setenter2)
+        self.ui.listWidget.itemClicked.connect(self.setenterA)
+        self.ui.listWidget_2.itemClicked.connect(self.setenterB)
 
         self.bsapvs = ['GDET:FEE1:241:ENRC', 'GDET:FEE1:242:ENRC',
                        'GDET:FEE1:361:ENRC', 'GDET:FEE1:362:ENRC']
@@ -55,7 +57,7 @@ class RTBSA(QMainWindow):
 
         self.ui.common1.addItems(commonlist)
         self.ui.common2.addItems(commonlist)
-        self.ui.common1.setCurrentIndex(24)
+        self.ui.common1.setCurrentIndex(28)
         self.ui.common1.activated.connect(self.commonactivated)
         self.ui.common2.activated.connect(self.commonactivated)
         self.ui.AvsB.clicked.connect(self.AvsBClick)
@@ -133,6 +135,7 @@ class RTBSA(QMainWindow):
         self.statusBar().addWidget(self.status_text, 1)
         self.statusBar().setPalette(palette)
 
+    # Effectively an autocomplete
     def search(self, enter, widget):
         widget.clear()
         query = str(enter.text())
@@ -140,10 +143,10 @@ class RTBSA(QMainWindow):
             if query.lower() in pv.lower():
                 widget.addItem(pv)
 
-    def search1(self):
+    def searchA(self):
         self.search(self.ui.enter1, self.ui.listWidget)
 
-    def search2(self):
+    def searchB(self):
         self.search(self.ui.enter2, self.ui.listWidget_2)
 
     def setEnter(self, widget, enter, search, enter_rb):
@@ -155,43 +158,35 @@ class RTBSA(QMainWindow):
             self.stop()
             self.on_draw()
 
-    def setenter1(self):
-        self.setEnter(self.ui.listWidget, self.ui.enter1, self.search1,
-                 self.ui.enter1_rb)
+    def setenterA(self):
+        self.setEnter(self.ui.listWidget, self.ui.enter1, self.searchA,
+                      self.ui.enter1_rb)
 
-    def setenter2(self):
-        self.setEnter(self.ui.listWidget_2, self.ui.enter2, self.search2,
-                 self.ui.enter2_rb)
+    def setenterB(self):
+        self.setEnter(self.ui.listWidget_2, self.ui.enter2, self.searchB,
+                      self.ui.enter2_rb)
+
+    def correctNumpoints(self, errorMessage, acceptableValue):
+        self.statusBar().showMessage(errorMessage, 6000)
+        self.numpoints = acceptableValue
+        self.ui.points.setText(str(acceptableValue))
 
     def points_entered(self):
         try:
             self.numpoints = int(self.ui.points.text())
         except ValueError:
-            self.statusBar().showMessage('Enter an integer, 1 to 2800', 6000)
-            self.numpoints = 120
-            self.ui.points.setText('120')
+            self.correctNumpoints('Enter an integer, 1 to 2800', 120)
             return
 
         if self.numpoints > 2800:
-            self.statusBar().showMessage('Max # points is 2800', 6000)
-            self.numpoints = 2800
-            self.ui.points.setText('2800')
+            self.correctNumpoints('Max # points is 2800', 2800)
             return
 
         if self.numpoints < 1:
-            self.statusBar().showMessage('Min # points is 1', 6000)
-            self.numpoints = 1
-            self.ui.points.setText('1')
+            self.correctNumpoints('Min # points is 1', 1)
             return
 
         self.reinitialize_plot()
-
-    def pv1select(self):
-        self.pv1 = self.ui.pv1box.currentText()
-        if self.pv1 == 'Select PV':
-            return
-        else:
-            self.stop()
 
     def populateDevices(self, common_rb, common, enter_rb, enter, device):
 
@@ -420,6 +415,7 @@ class RTBSA(QMainWindow):
                      self.fullPVName)
 
     def genABPlot(self):
+
         self.curve = pg.ScatterPlotItem(self.dataBufferA, self.dataBufferB,
                                         pen=1, symbol='x', size=5)
         self.plot.addItem(self.curve)
@@ -493,15 +489,22 @@ class RTBSA(QMainWindow):
         else:
             self.genPlotAndSetTimer(self.genFFTPlot, self.update_plot_FFT)
 
-    def filterFunc(self, device):
-        return lambda x: (not np.isnan(x)
-                          and (x < 12000
-                               if self.devices[device] == "BLEN:LI24:886HSTBR"
-                               else True))
-    def filterVals(self):
-        self.dataBufferA = filter(self.filterFunc("A"), self.dataBufferA)
-        self.dataBufferB = filter(self.filterFunc("B"), self.dataBufferB)
+    def filterData(self, dataBuffer, filterFunc):
+        mask = [filterFunc(x) for x in dataBuffer]
+        self.dataBufferA = list(compress(self.dataBufferA, mask))
+        self.dataBufferB = list(compress(self.dataBufferB, mask))
 
+    # Need to filter out errant indices from both buffers to keep them
+    # synchronized
+    def filterVals(self):
+        if (self.devices["A"] == "BLEN:LI24:886HSTBR"
+                or self.devices["B"] == "BLEN:LI24:886HSTBR"):
+            filterFunc = lambda x: not np.isnan(x) and x < 12000
+        else:
+            filterFunc = lambda x: not np.isnan(x)
+
+        self.filterData(self.dataBufferA, filterFunc)
+        self.filterData(self.dataBufferB, filterFunc)
 
     def setPlotRanges(self):
         if self.ui.autoscale_cb.isChecked():
@@ -903,8 +906,8 @@ class RTBSA(QMainWindow):
             self.statusBar().showMessage('Saved to %s' % path, 2000)
 
     def on_about(self):
-        msg = """Can you read this?  If so, congratulations. You are a magical, 
-              marvelous troll."""
+        msg = ("Can you read this?  If so, congratulations. You are a magical, "
+              + "marvelous troll.")
         QMessageBox.about(self, "About", msg.strip())
 
 
