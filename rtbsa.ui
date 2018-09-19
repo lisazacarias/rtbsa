@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>937</width>
-    <height>880</height>
+    <width>927</width>
+    <height>867</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -226,13 +226,19 @@
           <property name="title">
            <string>Controls</string>
           </property>
-          <layout class="QVBoxLayout" name="verticalLayout_13">
+          <layout class="QHBoxLayout" name="horizontalLayout_3">
            <item>
-            <layout class="QVBoxLayout" name="verticalLayout_12">
+            <layout class="QVBoxLayout" name="verticalLayout_13">
              <item>
-              <layout class="QVBoxLayout" name="verticalLayout_11">
+              <layout class="QHBoxLayout" name="horizontalLayout_8">
                <item>
                 <widget class="QLabel" name="label_2">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                   <horstretch>200</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
                  <property name="maximumSize">
                   <size>
                    <width>60</width>
@@ -303,6 +309,9 @@
                    </disabled>
                   </palette>
                  </property>
+                 <property name="layoutDirection">
+                  <enum>Qt::LeftToRight</enum>
+                 </property>
                  <property name="text">
                   <string>Points:</string>
                  </property>
@@ -313,6 +322,18 @@
                </item>
                <item>
                 <widget class="QLineEdit" name="points">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                   <horstretch>200</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="minimumSize">
+                  <size>
+                   <width>45</width>
+                   <height>0</height>
+                  </size>
+                 </property>
                  <property name="maximumSize">
                   <size>
                    <width>50</width>
@@ -356,6 +377,9 @@
                    </disabled>
                   </palette>
                  </property>
+                 <property name="layoutDirection">
+                  <enum>Qt::LeftToRight</enum>
+                 </property>
                  <property name="text">
                   <string>2800</string>
                  </property>
@@ -367,30 +391,34 @@
               </layout>
              </item>
              <item>
-              <widget class="QPushButton" name="draw_button">
-               <property name="minimumSize">
-                <size>
-                 <width>95</width>
-                 <height>50</height>
-                </size>
-               </property>
-               <property name="text">
-                <string>Start</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QPushButton" name="stop_button">
-               <property name="minimumSize">
-                <size>
-                 <width>95</width>
-                 <height>50</height>
-                </size>
-               </property>
-               <property name="text">
-                <string>Stop</string>
-               </property>
-              </widget>
+              <layout class="QVBoxLayout" name="verticalLayout_12">
+               <item>
+                <widget class="QPushButton" name="draw_button">
+                 <property name="minimumSize">
+                  <size>
+                   <width>95</width>
+                   <height>50</height>
+                  </size>
+                 </property>
+                 <property name="text">
+                  <string>Start</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="stop_button">
+                 <property name="minimumSize">
+                  <size>
+                   <width>95</width>
+                   <height>50</height>
+                  </size>
+                 </property>
+                 <property name="text">
+                  <string>Stop</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
              </item>
              <item>
               <layout class="QVBoxLayout" name="verticalLayout_4">
@@ -701,7 +729,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>937</width>
+     <width>927</width>
      <height>26</height>
     </rect>
    </property>

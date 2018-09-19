@@ -26,20 +26,23 @@ class RTBSA(QMainWindow):
         self.setWindowTitle('Real Time BSA')
         self.loadStyleSheet()
         self.setUpGraph()
+
         QObject.connect(self.ui.enter1, SIGNAL("textChanged(const QString&)"),
                         self.search1)
         QObject.connect(self.ui.enter2, SIGNAL("textChanged(const QString&)"),
                         self.search2)
+
         self.ui.listWidget.itemClicked.connect(self.setenter1)
         self.ui.listWidget_2.itemClicked.connect(self.setenter2)
+
         self.bsapvs = ['GDET:FEE1:241:ENRC', 'GDET:FEE1:242:ENRC',
                        'GDET:FEE1:361:ENRC', 'GDET:FEE1:362:ENRC']
 
         # Generate list of BSA PVS
         try:
-            egetBSAPVs = check_output(['eget', '-ts', 'ds', '-a',
-                                       'tag=LCLS.BSA.rootnames']).splitlines()[1:-1]
-            self.bsapvs = self.bsapvs + egetBSAPVs
+            BSAPVs = check_output(['eget', '-ts', 'ds', '-a',
+                                   'tag=LCLS.BSA.rootnames']).splitlines()[1:-1]
+            self.bsapvs = self.bsapvs + BSAPVs
 
         # Backup for timeout error
         except CalledProcessError:
@@ -104,6 +107,8 @@ class RTBSA(QMainWindow):
         self.menuBar().setStyleSheet('QWidget{background-color:grey;color:purple}')
         self.create_menu()
         self.create_status_bar()
+
+        self.devices = {"A":None, "B":None}
 
     def setUpGraph(self):
         self.plot = pg.PlotWidget(alpha=0.75)
@@ -188,30 +193,61 @@ class RTBSA(QMainWindow):
         else:
             self.stop()
 
-    def appendToPvList(self, common_rb, common, enter_rb, enter, device):
-        success = True
+    def populateDevices(self, common_rb, common, enter_rb, enter, device):
 
+        # HSTBR is what gets the beam synchronous data
         if common_rb.isChecked():
-            self.pvlist.append(str(common.currentText() + 'HSTBR'))
+            self.devices[device] = str(common.currentText()) + 'HSTBR'
 
         elif enter_rb.isChecked():
             pv = str(enter.text()).strip()
+            # Checks that it's non empty and that it's a BSA pv
             if pv and pv in self.bsapvs:
-                self.pvlist.append(str(enter.text()) + 'HSTBR')
+                self.devices[device] = str(enter.text()) + 'HSTBR'
             else:
                 self.statusBar().showMessage('Device ' + device
                                              + ' invalid. Aborting.', 10000)
                 self.ui.draw_button.setEnabled(True)
-                success = False
+                return False
 
-        return success
+        return True
 
+    ############################################################################
+    # Time 1 is when Device A started acquiring data, and Time 2 is when Device
+    # B started acquiring data. Since they're not guaranteed to start
+    # acquisition at the same time, one data buffer might be ahead of the other,
+    # meaning that the intersection of the two buffers would not include the
+    # first n elements of one and the last n elements of the other. See the
+    # diagram below, where the dotted line represents the time axis (one buffer
+    # is contained  by square brackets [], the other by curly braces {}, and the
+    # times where each starts  and ends is indicated right underneath).
+    #
+    #
+    #          [           {                            ]           }
+    # <----------------------------------------------------------------------> t
+    #       t1_start    t2_start                     t1_end      t2_end
+    #
+    #
+    # Note that both buffers are of the same size (self.numpoints) so that:
+    # (t1_end - t1_start) = (t2_end - t2_start)
+    #
+    # From the diagram, we see that only the time between t2_start and t1_end
+    # contains data from both buffers (t1_start to t2_start only contains data
+    # from buffer 1, and t1_end to t2_end only contains data from buffer 2).
+    # Using that, we can chop the beginning of buffer 1 and the end of buffer 2
+    # so that we're only left with the overlapping region.
+    #
+    # In order to figure out how many points we need to chop from each buffer
+    # (it's the same number for both since they're both the same size), we
+    # multiply the time delta by the beam rate (yay dimensional analysis!):
+    # seconds * (shots/second) = (number of shots)
+    ############################################################################
     def setValSynced(self):
 
         numBadShots = round((self.time2 - self.time1) * self.rate.value)
 
-        # Gets opposite indices depending on which is greater (and 0 if they're
-        # equal)
+        # Gets opposite indices depending on which time is greater (and [0:2800]
+        # if they're equal)
         val1synced = self.val1pre[max(0, numBadShots)
                                   :min(2800, 2800 + numBadShots)]
         val2synced = self.val2pre[max(0, -numBadShots)
@@ -220,6 +256,7 @@ class RTBSA(QMainWindow):
         return [abs(numBadShots), val1synced, val2synced]
 
     def updateRate(self):
+        # self.rate is a PV, such that .value is shorthand for .getval
         rate = self.rate.value
         while rate not in [120.0, 60.0, 30.0, 10.0]:
             QApplication.processEvents()
@@ -244,21 +281,21 @@ class RTBSA(QMainWindow):
         # If i use Popen instead of pyepics caget, the program doesn't
         # start lagging if you change PVs (?!?!?). Some stupid bug in 
         # new pyepics.
-        getdata = Popen("caget " + self.device, stdout=PIPE, shell=True)
+        getdata = Popen("caget " + self.fullPVName, stdout=PIPE, shell=True)
         newdata = str(getdata.communicate()).split()[2:-1]
         newdata[-1] = newdata[-1][:-4]
         return [float(i) for i in newdata]
 
-    def initialzeData(self):
+    def initializeData(self):
         self.statusBar().showMessage('Initializing...')
 
         if self.ui.common1_rb.isChecked():
-            self.device = str(self.ui.common1.currentText() + 'HSTBR')
+            self.fullPVName = str(self.ui.common1.currentText() + 'HSTBR')
 
         elif self.ui.enter1_rb.isChecked():
             pv = str(self.ui.enter1.text()).strip()
             if pv and pv in self.bsapvs:
-                self.device = str(self.ui.enter1.text() + 'HSTBR')
+                self.fullPVName = pv + 'HSTBR'
             else:
                 return None
         else:
@@ -266,85 +303,43 @@ class RTBSA(QMainWindow):
 
         return self.getData()
 
-    def plotFit(self, newdata):
-        self.curve = pg.PlotCurveItem(newdata[2800 - self.numpoints:2800],
-                                      pen=1)
-        self.plot.addItem(self.curve)
-        self.plot.setTitle(self.device)
-        self.xdata = range(self.numpoints)
-
-        # Fit line
-        if self.ui.line_cb.isChecked():
-            self.getLinearFit(self.xdata, newdata[2800 - self.numpoints:2800],
-                              False)
-            self.plot.addItem(self.fit)
-
-        # Fit polynomial
-        elif self.ui.parab_cb.isChecked():
-            self.ui.fitedit.setDisabled(False)
-            self.getPolynomialFit(self.xdata,
-                                  newdata[2800 - self.numpoints:2800],
-                                  False)
-            self.plot.addItem(self.parab)
-
-    def genTimePlotA(self):
-        newdata = self.initialzeData()
-
-        # Using pyepics caget causes progressive slowdown of GUI!?!?
-
-        if not newdata:
-            self.statusBar().showMessage('Invalid PV? Unable to get data.'
-                                         + ' Aborting.', 10000)
-            self.ui.draw_button.setEnabled(True)
-            return
-        try:
-            self.plotFit(newdata)
-        except UnboundLocalError:
-            self.statusBar().showMessage('No Data, Aborting Plotting Algorithm',
-                                         10000)
-            return
-
-        self.statusBar().showMessage('Running')
-        self.timer = QTimer(self)
-        self.timer.singleShot(self.updatetime, self.update_plot_HSTBR)
-
     def adjustVals(self):
         self.updateRate()
-        numBadShots, val1synced, val2synced = self.setValSynced()
+        numBadShots, self.dataBufferA, self.dataBufferB = self.setValSynced()
 
         blength = 2800 - numBadShots
-        if (self.numpoints <= blength):
-            self.val1 = val1synced[blength - self.numpoints:blength]
-            self.val2 = val2synced[blength - self.numpoints:blength]
-        else:
-            self.val1 = val1synced
-            self.val2 = val2synced
+
+        # Make sure the buffer size doesn't exceed the desired number of points
+        if (self.numpoints < blength):
+            self.dataBufferA = self.dataBufferA[blength - self.numpoints:blength]
+            self.dataBufferB = self.dataBufferB[blength - self.numpoints:blength]
 
     def updateValsFromInput(self):
-        self.pvlist = []
 
-        if not self.appendToPvList(self.ui.common1_rb, self.ui.common1,
-                                   self.ui.enter1_rb, self.ui.enter1, "A"):
+        if not self.populateDevices(self.ui.common1_rb, self.ui.common1,
+                                    self.ui.enter1_rb, self.ui.enter1, "A"):
             return False
 
-        if not self.appendToPvList(self.ui.common2_rb, self.ui.common2,
-                                   self.ui.enter2_rb, self.ui.enter2, "B"):
+        if not self.populateDevices(self.ui.common2_rb, self.ui.common2,
+                                    self.ui.enter2_rb, self.ui.enter2, "B"):
             return False
 
-        self.val1, self.val2 = [], []
+        self.dataBufferA, self.dataBufferB = [], []
 
-        self.val1pv = PV(self.pvlist[0], form='time')
-        self.val2pv = PV(self.pvlist[1], form='time')
+        # Without the time parameter, we wouldn't get the timestamp
+        self.val1pv = PV(self.devices["A"], form='time')
+        self.val2pv = PV(self.devices["B"], form='time')
 
         self.statusBar().showMessage('Initializing/Syncing (be patient, '
                                      + 'may take 5 seconds)...')
 
-        self.time1, self.time2 = 1, 2
+        self.time1, self.time2 = None, None
 
-        self.booyah = self.val1pv.add_callback(self.ItDoneChanged)
-        self.booyah2 = self.val2pv.add_callback(self.ItDoneChanged2)
+        # For some reason, callbacks are the only way to get a timestamp
+        self.val1CallbackIndex = self.val1pv.add_callback(self.val1Callback)
+        self.val2CallbackIndex = self.val2pv.add_callback(self.val2Callback)
 
-        while (self.time1 == 1 or self.time2 == 2) and not self.abort:
+        while (not self.time1 or not self.time2) and not self.abort:
             QApplication.processEvents()
 
         self.adjustVals()
@@ -374,7 +369,7 @@ class RTBSA(QMainWindow):
             if updateExistingPlot:
                 self.parab.setData(sorted1, fit)
             else:
-                self.parab = pg.PlotCurveItem(self.xdata, fit, pen=3)
+                self.parab = pg.PlotCurveItem(xdata, fit, pen=3)
 
             if self.fitorder == 2:
                 self.slope_text.setText('Peak: ' + str(-co[1] / (2 * co[0])))
@@ -392,26 +387,49 @@ class RTBSA(QMainWindow):
             self.slope_text.setText('Fit failed')
             pass
 
-    # TODO This is near identical to plotFit - I'll ask Chris if the differences
-    # are necessary
-    def genABPlot(self):
-        self.curve = pg.ScatterPlotItem(self.val1, self.val2, pen=1, symbol='x',
-                                        size=5)
+    def plotFit(self, xdata, ydata, title):
         self.plot.addItem(self.curve)
-        self.plot.setTitle(self.pvlist[1] + ' vs. ' + self.pvlist[0])
+        self.plot.setTitle(title)
 
+        # Fit line
         if self.ui.line_cb.isChecked():
-            self.fit = pg.PlotCurveItem(pen=3)
-            self.getLinearFit(self.val1, self.val2, True)
+            self.getLinearFit(xdata, ydata, False)
             self.plot.addItem(self.fit)
 
+        # Fit polynomial
         elif self.ui.parab_cb.isChecked():
-            self.parab = pg.PlotCurveItem(pen=3, size=2)
-            self.getPolynomialFit(self.val1, self.val2, True)
+            self.ui.fitedit.setDisabled(False)
+            self.getPolynomialFit(xdata, ydata, False)
             self.plot.addItem(self.parab)
 
+    def genTimePlotA(self):
+        newdata = self.initializeData()
+
+        if not newdata:
+            self.statusBar().showMessage('Invalid PV? Unable to get data.'
+                                         + ' Aborting.', 10000)
+            self.ui.draw_button.setEnabled(True)
+            return
+
+        self.curve = pg.PlotCurveItem(newdata[2800 - self.numpoints:2800],
+                                      pen=1)
+        self.plot.addItem(self.curve)
+
+        self.xdata = range(self.numpoints)
+
+        self.plotFit(self.xdata, newdata[2800 - self.numpoints:2800],
+                     self.fullPVName)
+
+    def genABPlot(self):
+        self.curve = pg.ScatterPlotItem(self.dataBufferA, self.dataBufferB, pen=1, symbol='x',
+                                        size=5)
+        self.plot.addItem(self.curve)
+
+        self.plotFit(self.dataBufferA, self.dataBufferB,
+                     self.devices["B"] + ' vs. ' + self.devices["A"])
+
     def genFFTPlot(self):
-        newdata = self.initialzeData()
+        newdata = self.initializeData()
 
         if not newdata:
             return
@@ -429,9 +447,9 @@ class RTBSA(QMainWindow):
         self.curve = pg.PlotCurveItem(x=self.freqs[self.idx],
                                       y=ps[self.idx], pen=1)
         self.plot.addItem(self.curve)
-        self.plot.setTitle(self.device)
+        self.plot.setTitle(self.fullPVName)
 
-    def genPlotAndSetTimer(self, genPlot):
+    def genPlotAndSetTimer(self, genPlot, updateMethod):
         if self.abort:
             return False
 
@@ -443,7 +461,7 @@ class RTBSA(QMainWindow):
             return False
 
         self.timer = QTimer(self)
-        self.timer.singleShot(self.updatetime, self.update_BSA_Plot)
+        self.timer.singleShot(self.updatetime, updateMethod)
         self.statusBar().showMessage('Running')
         return True
 
@@ -455,9 +473,8 @@ class RTBSA(QMainWindow):
                            or self.ui.AFFT.isChecked())
 
         if not plotTypeIsValid:
-            self.statusBar().showMessage(
-                'Pick a Plot Type (PV vs. time or B vs A)',
-                10000)
+            self.statusBar().showMessage('Pick a Plot Type (PV vs. time or B vs A)',
+                                         10000)
             return
 
         self.ui.draw_button.setDisabled(True)
@@ -467,47 +484,42 @@ class RTBSA(QMainWindow):
 
         ####Plot history buffer for one PV####
         if self.ui.AvsT_cb.isChecked():
-            self.genTimePlotA()
+            if not self.genPlotAndSetTimer(self.genTimePlotA,
+                                           self.update_plot_HSTBR):
+                return
 
         ####Plot for 2 PVs####
         elif self.ui.AvsB.isChecked():
             if (not self.updateValsFromInput()
-                    or not self.genPlotAndSetTimer(self.genABPlot)):
+                    or not self.genPlotAndSetTimer(self.genABPlot,
+                                                   self.update_BSA_Plot)):
                 return
 
         ####Plot power spectrum####
         else:
-            if not self.genPlotAndSetTimer(self.genFFTPlot):
+            if not self.genPlotAndSetTimer(self.genFFTPlot, self.update_plot_FFT):
                 return
 
+    def filterFunc(self, device):
+        return lambda x: (not np.isnan(x)
+                          and (x < 12000
+                               if self.devices[device] == "BLEN:LI24:886HSTBR"
+                               else True))
     def filterVals(self):
-        # Filter out NaNs and ridiculous BLEN values
-        elements_to_use = np.ones(len(self.val2), dtype=bool)
-        elements_to_use = np.logical_and(elements_to_use,
-                                         np.logical_not(np.isnan(self.val2)))
-        elements_to_use = np.logical_and(elements_to_use,
-                                         np.logical_not(np.isnan(self.val1)))
+        self.dataBufferA = filter(self.filterFunc("A"), self.dataBufferA)
+        self.dataBufferB = filter(self.filterFunc("B"), self.dataBufferB)
 
-        if "BLEN:LI24:886" in self.pvlist[1]:
-            elements_to_use = np.logical_and(elements_to_use,
-                                             np.logical_not(self.val2 > 12000))
-        if "BLEN:LI24:886" in self.pvlist[0]:
-            elements_to_use = np.logical_and(elements_to_use,
-                                             np.logical_not(self.val1 > 12000))
-
-        self.val1 = self.val1[elements_to_use]
-        self.val2 = self.val2[elements_to_use]
 
     def setPlotRanges(self):
         if self.ui.autoscale_cb.isChecked():
-            mx = np.max(self.val2)
-            mn = np.min(self.val2)
+            mx = np.max(self.dataBufferB)
+            mn = np.min(self.dataBufferB)
 
             if mn != mx:
                 self.plot.setYRange(mn, mx)
 
-            mx = np.max(self.val1)
-            mn = np.min(self.val1)
+            mx = np.max(self.dataBufferA)
+            mn = np.min(self.dataBufferA)
 
             if mn != mx:
                 self.plot.setXRange(mn, mx)
@@ -529,35 +541,37 @@ class RTBSA(QMainWindow):
         self.adjustVals()
         self.filterVals()
 
-        self.curve.setData(self.val1, self.val2)
+        self.curve.setData(self.dataBufferA, self.dataBufferB)
 
         self.setPlotRanges()
 
+        # Logic to determine positions of labels when not running autoscale
         if self.ui.avg_cb.isChecked():
-            a = mean(self.val2)
-            self.setPosAndText(self.avg_text, a, min(self.val1),
-                               min(self.val2), 'AVG: ')
+            self.setPosAndText(self.avg_text, mean(self.dataBufferB),
+                               min(self.dataBufferA), min(self.dataBufferB),
+                               'AVG: ')
 
         if self.ui.std_cb.isChecked():
-            val1Min = min(self.val1)
-            xPos = (val1Min + (val1Min + max(self.val1)) / 2) / 2
-            s = std(self.val2)
-            self.setPosAndText(self.std_text, s, xPos, min(self.val2), 'STD: ')
+            val1Min = min(self.dataBufferA)
+            xPos = (val1Min + (val1Min + max(self.dataBufferA))/2)/2
+
+            self.setPosAndText(self.std_text, std(self.dataBufferB), xPos,
+                               min(self.dataBufferB), 'STD: ')
 
         if self.ui.corr_cb.isChecked():
-            correlation = corrcoef(self.val1, self.val2)
-            self.setPosAndText(self.corr_text, correlation, min(self.val1),
-                               max(self.val2), "Corr. Coefficient: ")
+            correlation = corrcoef(self.dataBufferA, self.dataBufferB)
+            self.setPosAndText(self.corr_text, correlation, min(self.dataBufferA),
+                               max(self.dataBufferB), "Corr. Coefficient: ")
 
         if self.ui.line_cb.isChecked():
-            self.slope_text.setPos((min(self.val1) + max(self.val1)) / 2,
-                                   min(self.val2))
-            self.getLinearFit(self.val1, self.val2, True)
+            self.slope_text.setPos((min(self.dataBufferA) + max(self.dataBufferA))/2,
+                                   min(self.dataBufferB))
+            self.getLinearFit(self.dataBufferA, self.dataBufferB, True)
 
         elif self.ui.parab_cb.isChecked():
-            self.slope_text.setPos((min(self.val1) + max(self.val1)) / 2,
-                                   min(self.val2))
-            self.getPolynomialFit(self.val1, self.val2, True)
+            self.slope_text.setPos((min(self.dataBufferA) + max(self.dataBufferA)) / 2,
+                                   min(self.dataBufferB))
+            self.getPolynomialFit(self.dataBufferA, self.dataBufferB, True)
 
         self.timer.singleShot(self.updatetime, self.update_BSA_Plot)
 
@@ -638,12 +652,12 @@ class RTBSA(QMainWindow):
         self.timer.singleShot(40, self.update_plot_FFT)
 
     # Callback function for PV1
-    def ItDoneChanged(self, pvname=None, value=None, timestamp=None, **kw):
+    def val1Callback(self, pvname=None, value=None, timestamp=None, **kw):
         self.time1 = timestamp
         self.val1pre = value
 
     # Callback function for PV2
-    def ItDoneChanged2(self, pvname=None, value=None, timestamp=None, **kw):
+    def val2Callback(self, pvname=None, value=None, timestamp=None, **kw):
         self.time2 = timestamp
         self.val2pre = value
 
@@ -730,17 +744,6 @@ class RTBSA(QMainWindow):
             self.stop()
             self.timer.singleShot(150, self.on_draw)
 
-            # Mechanism to fix a race condition- start a timer which allows the 
-            # main loop to regain control and see that the abort variable has 
-            # turned positive, and then the timer restarts the drawing process 
-            # after a short time, giving the active loop time to stop.  This 
-            # fixes a problem I was seeing (Gibbs noticed first) with a double 
-            # plot showing up (rare occurence, only happened if the user tried 
-            # to plot a blank PV name from the enter line)
-
-            # QObject.connect(self.timer2, SIGNAL("timeout()"), self.on_draw)
-            # self.timer2.start(self.updatetime)
-
     def common_2_click(self):
         if self.ui.common2_rb.isChecked():
             self.ui.common2.setEnabled(True)
@@ -818,7 +821,7 @@ class RTBSA(QMainWindow):
                 self.curve = pg.PlotCurveItem(x=self.freqs[self.idx],
                                               y=ps[self.idx], pen=1)
                 self.plot.addItem(self.curve)
-                self.plot.setTitle(self.device)
+                self.plot.setTitle(self.fullPVName)
 
         except:
             print "Error reinitializing plot"
@@ -839,13 +842,13 @@ class RTBSA(QMainWindow):
         QApplication.processEvents()
 
         try:
-            self.val1pv.remove_callback(index=self.booyah)
+            self.val1pv.remove_callback(index=self.val1CallbackIndex)
             self.val1pv.disconnect()
         except:
             self.statusBar().showMessage('Stopped')
 
         try:
-            self.val2pv.remove_callback(index=self.booyah2)
+            self.val2pv.remove_callback(index=self.val2CallbackIndex)
             self.val2pv.disconnect()
         except:
             self.statusBar().showMessage('Stopped')
