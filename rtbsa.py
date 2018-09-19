@@ -108,7 +108,7 @@ class RTBSA(QMainWindow):
         self.create_menu()
         self.create_status_bar()
 
-        self.devices = {"A":None, "B":None}
+        self.devices = {"A": None, "B": None}
 
     def setUpGraph(self):
         self.plot = pg.PlotWidget(alpha=0.75)
@@ -318,11 +318,11 @@ class RTBSA(QMainWindow):
 
         if not self.populateDevices(self.ui.common1_rb, self.ui.common1,
                                     self.ui.enter1_rb, self.ui.enter1, "A"):
-            return False
+            return
 
         if not self.populateDevices(self.ui.common2_rb, self.ui.common2,
                                     self.ui.enter2_rb, self.ui.enter2, "B"):
-            return False
+            return
 
         self.dataBufferA, self.dataBufferB = [], []
 
@@ -343,7 +343,6 @@ class RTBSA(QMainWindow):
             QApplication.processEvents()
 
         self.adjustVals()
-        return True
 
     def getLinearFit(self, xdata, ydata, updateExistingPlot):
         try:
@@ -421,8 +420,8 @@ class RTBSA(QMainWindow):
                      self.fullPVName)
 
     def genABPlot(self):
-        self.curve = pg.ScatterPlotItem(self.dataBufferA, self.dataBufferB, pen=1, symbol='x',
-                                        size=5)
+        self.curve = pg.ScatterPlotItem(self.dataBufferA, self.dataBufferB,
+                                        pen=1, symbol='x', size=5)
         self.plot.addItem(self.curve)
 
         self.plotFit(self.dataBufferA, self.dataBufferB,
@@ -451,19 +450,18 @@ class RTBSA(QMainWindow):
 
     def genPlotAndSetTimer(self, genPlot, updateMethod):
         if self.abort:
-            return False
+            return
 
         try:
             genPlot()
         except UnboundLocalError:
             self.statusBar().showMessage('No Data, Aborting Plotting Algorithm',
                                          10000)
-            return False
+            return
 
         self.timer = QTimer(self)
         self.timer.singleShot(self.updatetime, updateMethod)
         self.statusBar().showMessage('Running')
-        return True
 
     # Where the magic happens(well, where it starts to happen). This initializes
     # the BSA plotting and then starts a timer to update the plot.
@@ -484,21 +482,16 @@ class RTBSA(QMainWindow):
 
         ####Plot history buffer for one PV####
         if self.ui.AvsT_cb.isChecked():
-            if not self.genPlotAndSetTimer(self.genTimePlotA,
-                                           self.update_plot_HSTBR):
-                return
+            self.genPlotAndSetTimer(self.genTimePlotA, self.update_plot_HSTBR)
 
         ####Plot for 2 PVs####
         elif self.ui.AvsB.isChecked():
-            if (not self.updateValsFromInput()
-                    or not self.genPlotAndSetTimer(self.genABPlot,
-                                                   self.update_BSA_Plot)):
-                return
+            self.updateValsFromInput()
+            self.genPlotAndSetTimer(self.genABPlot, self.update_BSA_Plot)
 
         ####Plot power spectrum####
         else:
-            if not self.genPlotAndSetTimer(self.genFFTPlot, self.update_plot_FFT):
-                return
+            self.genPlotAndSetTimer(self.genFFTPlot, self.update_plot_FFT)
 
     def filterFunc(self, device):
         return lambda x: (not np.isnan(x)
