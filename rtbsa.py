@@ -489,7 +489,12 @@ class RTBSA(QMainWindow):
         else:
             self.genPlotAndSetTimer(self.genFFTPlot, self.update_plot_FFT)
 
-    def filterData(self, dataBuffer, filterFunc):
+    def filterData(self, dataBuffer, key):
+        if self.devices[key] == "BLEN:LI24:886HSTBR":
+            filterFunc = lambda x: not np.isnan(x) and x < 12000
+        else:
+            filterFunc = lambda x: not np.isnan(x)
+
         mask = [filterFunc(x) for x in dataBuffer]
         self.dataBufferA = list(compress(self.dataBufferA, mask))
         self.dataBufferB = list(compress(self.dataBufferB, mask))
@@ -497,14 +502,8 @@ class RTBSA(QMainWindow):
     # Need to filter out errant indices from both buffers to keep them
     # synchronized
     def filterVals(self):
-        if (self.devices["A"] == "BLEN:LI24:886HSTBR"
-                or self.devices["B"] == "BLEN:LI24:886HSTBR"):
-            filterFunc = lambda x: not np.isnan(x) and x < 12000
-        else:
-            filterFunc = lambda x: not np.isnan(x)
-
-        self.filterData(self.dataBufferA, filterFunc)
-        self.filterData(self.dataBufferB, filterFunc)
+        self.filterData(self.dataBufferA, "A")
+        self.filterData(self.dataBufferB, "B")
 
     def setPlotRanges(self):
         if self.ui.autoscale_cb.isChecked():
