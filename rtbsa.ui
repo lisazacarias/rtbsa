@@ -73,7 +73,7 @@
                   <widget class="QComboBox" name="common1">
                    <property name="minimumSize">
                     <size>
-                     <width>200</width>
+                     <width>180</width>
                      <height>25</height>
                     </size>
                    </property>
@@ -143,7 +143,7 @@
                   <widget class="QComboBox" name="common2">
                    <property name="minimumSize">
                     <size>
-                     <width>200</width>
+                     <width>180</width>
                      <height>25</height>
                     </size>
                    </property>
@@ -393,19 +393,7 @@
              <item>
               <layout class="QHBoxLayout" name="horizontalLayout_9">
                <item>
-                <widget class="QLabel" name="std_label">
-                 <property name="sizePolicy">
-                  <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-                   <horstretch>200</horstretch>
-                   <verstretch>0</verstretch>
-                  </sizepolicy>
-                 </property>
-                 <property name="maximumSize">
-                  <size>
-                   <width>80</width>
-                   <height>30</height>
-                  </size>
-                 </property>
+                <widget class="QCheckBox" name="filterByStdDevs">
                  <property name="palette">
                   <palette>
                    <active>
@@ -415,15 +403,6 @@
                        <red>0</red>
                        <green>255</green>
                        <blue>0</blue>
-                      </color>
-                     </brush>
-                    </colorrole>
-                    <colorrole role="Text">
-                     <brush brushstyle="SolidPattern">
-                      <color alpha="255">
-                       <red>100</red>
-                       <green>255</green>
-                       <blue>100</blue>
                       </color>
                      </brush>
                     </colorrole>
@@ -438,15 +417,6 @@
                       </color>
                      </brush>
                     </colorrole>
-                    <colorrole role="Text">
-                     <brush brushstyle="SolidPattern">
-                      <color alpha="255">
-                       <red>100</red>
-                       <green>255</green>
-                       <blue>100</blue>
-                      </color>
-                     </brush>
-                    </colorrole>
                    </inactive>
                    <disabled>
                     <colorrole role="WindowText">
@@ -458,26 +428,16 @@
                       </color>
                      </brush>
                     </colorrole>
-                    <colorrole role="Text">
-                     <brush brushstyle="SolidPattern">
-                      <color alpha="255">
-                       <red>165</red>
-                       <green>164</green>
-                       <blue>164</blue>
-                      </color>
-                     </brush>
-                    </colorrole>
                    </disabled>
                   </palette>
                  </property>
-                 <property name="layoutDirection">
-                  <enum>Qt::LeftToRight</enum>
+                 <property name="font">
+                  <font>
+                   <pointsize>9</pointsize>
+                  </font>
                  </property>
                  <property name="text">
-                  <string>Std. Devs:</string>
-                 </property>
-                 <property name="alignment">
-                  <set>Qt::AlignCenter</set>
+                  <string>Std Dev</string>
                  </property>
                 </widget>
                </item>
@@ -491,7 +451,7 @@
                  </property>
                  <property name="minimumSize">
                   <size>
-                   <width>15</width>
+                   <width>35</width>
                    <height>0</height>
                   </size>
                  </property>
@@ -542,7 +502,7 @@
                   <enum>Qt::LeftToRight</enum>
                  </property>
                  <property name="text">
-                  <string>2</string>
+                  <string>3.0</string>
                  </property>
                  <property name="alignment">
                   <set>Qt::AlignCenter</set>
