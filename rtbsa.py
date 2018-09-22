@@ -4,21 +4,18 @@
 import sys
 import time
 
-from epics import caget, PV
+from epics import PV
 
 import numpy as np
 from numpy import polyfit, poly1d, polyval, corrcoef, std, mean
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
 from subprocess import CalledProcessError
+from itertools import compress
 
 from logbook import *
-
 from rtbsa_ui import Ui_RTBSA
-
 from Constants import *
-
-from itertools import compress
 
 class RTBSA(QMainWindow):
     def __init__(self, parent=None):
@@ -36,8 +33,8 @@ class RTBSA(QMainWindow):
                         self.searchB)
 
         # Changes the text in the input box to match the selection from the list
-        self.ui.listWidget.itemClicked.connect(self.setenterA)
-        self.ui.listWidget_2.itemClicked.connect(self.setenterB)
+        self.ui.listWidget.itemClicked.connect(self.setEnterA)
+        self.ui.listWidget_2.itemClicked.connect(self.setEnterB)
 
         self.bsapvs = ['GDET:FEE1:241:ENRC', 'GDET:FEE1:242:ENRC',
                        'GDET:FEE1:361:ENRC', 'GDET:FEE1:362:ENRC']
@@ -48,7 +45,7 @@ class RTBSA(QMainWindow):
                                    'tag=LCLS.BSA.rootnames']).splitlines()[1:-1]
             self.bsapvs = self.bsapvs + BSAPVs
 
-        # Backup for timeout error
+        # Backup for eget error
         except CalledProcessError:
             print "Unable to pull most recent PV list"
             self.bsapvs = self.bsapvs + bsapvs
@@ -57,30 +54,53 @@ class RTBSA(QMainWindow):
             self.ui.listWidget.addItem(pv)
             self.ui.listWidget_2.addItem(pv)
 
+        # Dropdown menu for device A (add common BSA PV's and make bunch length
+        # the default selection)
         self.ui.common1.addItems(commonlist)
-        self.ui.common2.addItems(commonlist)
         self.ui.common1.setCurrentIndex(21)
-        self.ui.common1.activated.connect(self.commonactivated)
-        self.ui.common2.activated.connect(self.commonactivated)
+        self.ui.common1.activated.connect(self.inputActivated)
+
+        # Dropdown menu for device B
+        self.ui.common2.addItems(commonlist)
+        self.ui.common2.activated.connect(self.inputActivated)
+
+        # All the checkboxes in the Settings section
+        self.ui.AvsT_cb.clicked.connect(self.AvsTClick)
         self.ui.AvsB.clicked.connect(self.AvsBClick)
-        self.ui.draw_button.clicked.connect(self.on_draw)
-        self.ui.stop_button.clicked.connect(self.stop)
-        self.ui.log_button.clicked.connect(self.logbook)
-        self.ui.mcclog_button.clicked.connect(self.MCCLog)
+        self.ui.AFFT.clicked.connect(self.AFFTClick)
         self.ui.avg_cb.clicked.connect(self.avg_click)
         self.ui.std_cb.clicked.connect(self.std_click)
         self.ui.corr_cb.clicked.connect(self.corr_click)
         self.ui.parab_cb.clicked.connect(self.parab_click)
         self.ui.line_cb.clicked.connect(self.line_click)
-        self.ui.fitedit.returnPressed.connect(self.fitorderactivated)
+
+        # All the buttons in the Controls section
+        self.ui.draw_button.clicked.connect(self.on_draw)
+        self.ui.stop_button.clicked.connect(self.stop)
+        self.ui.log_button.clicked.connect(self.logbook)
+        self.ui.mcclog_button.clicked.connect(self.MCCLog)
+
+        # fitedit is the text input box for "Order"
+        self.ui.fitedit.returnPressed.connect(self.fitOrderActivated)
+
+        # The radio buttons that enable the dropdown menus
         self.ui.common1_rb.clicked.connect(self.common_1_click)
         self.ui.common2_rb.clicked.connect(self.common_2_click)
+
+        # The radio buttons that enable the search bars
         self.ui.enter1_rb.clicked.connect(self.enter_1_click)
         self.ui.enter2_rb.clicked.connect(self.enter_2_click)
-        self.ui.AvsT_cb.clicked.connect(self.AvsTClick)
-        self.ui.AFFT.clicked.connect(self.AFFTClick)
-        self.ui.enter1.returnPressed.connect(self.commonactivated)
-        self.ui.enter2.returnPressed.connect(self.commonactivated)
+
+        # TODO ask Chris if we can remove this functionality
+        # Triggers a redrawing upon pressing enter in the search bar
+        # Proper usage should be using the search bar to search, and selecting
+        # from the results in the list. If it's not in the list, it's an invalid
+        # PV with no reason to attempt plotting
+        self.ui.enter1.returnPressed.connect(self.inputActivated)
+        self.ui.enter2.returnPressed.connect(self.inputActivated)
+
+        # Pressing enter in the text input boxes for points and std dev triggers
+        # updating the plot
         self.ui.points.returnPressed.connect(self.points_entered)
         self.ui.numStdDevs.returnPressed.connect(self.stdDevEntered)
 
@@ -116,12 +136,14 @@ class RTBSA(QMainWindow):
         self.create_menu()
         self.create_status_bar()
 
+        # A dictionary to store the PV names, initialized to None
         self.devices = {"A": None, "B": None}
 
+        # Versions of data buffers A and B that are filtered by standard
+        # deviation. Didn't want to edit those buffers directly so that we could
+        # unfliter or refilter with a different number more efficiently
         self.filteredBufferA = None
         self.filteredBufferB = None
-
-        self.filterByStdDevs = True
 
     def setUpGraph(self):
         self.plot = pg.PlotWidget(alpha=0.75)
@@ -169,11 +191,11 @@ class RTBSA(QMainWindow):
             self.stop()
             self.on_draw()
 
-    def setenterA(self):
+    def setEnterA(self):
         self.setEnter(self.ui.listWidget, self.ui.enter1, self.searchA,
                       self.ui.enter1_rb)
 
-    def setenterB(self):
+    def setEnterB(self):
         self.setEnter(self.ui.listWidget_2, self.ui.enter2, self.searchB,
                       self.ui.enter2_rb)
 
@@ -196,6 +218,7 @@ class RTBSA(QMainWindow):
             self.correctStdDevs('Enter a float > 0', 3.0)
             return
 
+        # Is there a way to combine an except and an if?
         if self.stdDevstoKeep <= 0:
             self.correctStdDevs('Enter a float > 0', 3.0)
             return
@@ -219,7 +242,7 @@ class RTBSA(QMainWindow):
 
     def populateDevices(self, common_rb, common, enter_rb, enter, device):
 
-        # HSTBR is what gets the beam synchronous data
+        # HSTBR is what gets the beam synchronous data buffer
         if common_rb.isChecked():
             self.devices[device] = str(common.currentText()) + 'HSTBR'
 
@@ -355,11 +378,11 @@ class RTBSA(QMainWindow):
 
         if not self.populateDevices(self.ui.common1_rb, self.ui.common1,
                                     self.ui.enter1_rb, self.ui.enter1, "A"):
-            return
+            return False
 
         if not self.populateDevices(self.ui.common2_rb, self.ui.common2,
                                     self.ui.enter2_rb, self.ui.enter2, "B"):
-            return
+            return False
 
         self.dataBufferA, self.dataBufferB = [], []
 
@@ -380,6 +403,7 @@ class RTBSA(QMainWindow):
             QApplication.processEvents()
 
         self.adjustVals()
+        return True
 
     def getLinearFit(self, xdata, ydata, updateExistingPlot):
         try:
@@ -468,6 +492,7 @@ class RTBSA(QMainWindow):
         else:
             self.plotCurveAndFit(self.dataBufferA, self.dataBufferB)
 
+    # TODO I have no idea what's happening here
     def updateFFTPlot(self, newdata, updateExistingPlot):
 
         if not newdata:
@@ -483,15 +508,10 @@ class RTBSA(QMainWindow):
         newdata = newdata.tolist()
 
         newdata.extend(np.zeros(self.numpoints * 2).tolist())
-        # newdata = newdata - np.mean(newdata)
 
         ps = np.abs(np.fft.fft(newdata)) / len(newdata)
 
-        self.FS = self.rate.value
-
-        # rate = {4: 1, 5: 10, 6: 30, 7: 60, 8: 120}
-        # i = caget('IOC:BSY0:MP01:BYKIK_RATE')
-        # self.FS = rate[i]
+        self.FS = self.updateRate()
 
         self.freqs = np.fft.fftfreq(len(newdata), 1.0 / self.FS)
         self.keep = (self.freqs >= 0)
@@ -511,7 +531,7 @@ class RTBSA(QMainWindow):
 
 
     def genFFTPlot(self):
-        return self.updateFFTPlot(self.initializeData(), False)
+        self.updateFFTPlot(self.initializeData(), False)
 
     def genPlotAndSetTimer(self, genPlot, updateMethod):
         if self.abort:
@@ -528,8 +548,8 @@ class RTBSA(QMainWindow):
         self.timer.singleShot(self.updatetime, updateMethod)
         self.statusBar().showMessage('Running')
 
-    # Where the magic happens(well, where it starts to happen). This initializes
-    # the BSA plotting and then starts a timer to update the plot.
+    # Where the magic happens (well, where it starts to happen). This
+    # initializes the BSA plotting and then starts a timer to update the plot.
     def on_draw(self):
         plotTypeIsValid = (self.ui.AvsT_cb.isChecked()
                            or self.ui.AvsB.isChecked()
@@ -547,21 +567,27 @@ class RTBSA(QMainWindow):
 
         ####Plot history buffer for one PV####
         if self.ui.AvsT_cb.isChecked():
-            self.genPlotAndSetTimer(self.genTimePlotA, self.update_plot_HSTBR)
+            if self.populateDevices(self.ui.common1_rb, self.ui.common1,
+                                    self.ui.enter1_rb, self.ui.enter1, "A"):
+                self.genPlotAndSetTimer(self.genTimePlotA,
+                                        self.update_plot_HSTBR)
 
         ####Plot for 2 PVs####
         elif self.ui.AvsB.isChecked():
-            self.updateValsFromInput()
-            self.genPlotAndSetTimer(self.genABPlot, self.update_BSA_Plot)
+            if self.updateValsFromInput():
+                self.genPlotAndSetTimer(self.genABPlot, self.update_BSA_Plot)
 
         ####Plot power spectrum####
         else:
-            self.genPlotAndSetTimer(self.genFFTPlot, self.update_plot_FFT)
+            if self.populateDevices(self.ui.common1_rb, self.ui.common1,
+                                    self.ui.enter1_rb, self.ui.enter1, "A"):
+                self.genPlotAndSetTimer(self.genFFTPlot, self.update_plot_FFT)
 
     # Need to filter out errant indices from both buffers to keep them
     # synchronized
     def filterData(self, dataBuffer, filterFunc, changeOriginal):
         mask = [filterFunc(x) for x in dataBuffer]
+
         if changeOriginal:
             self.dataBufferA = list(compress(self.dataBufferA, mask))
             self.dataBufferB = list(compress(self.dataBufferB, mask))
@@ -648,8 +674,6 @@ class RTBSA(QMainWindow):
                            self.ui.grid_cb.isChecked())
 
         self.adjustVals()
-
-        #filter NaN's
         self.filterNans()
 
         if self.ui.filterByStdDevs.isChecked():
@@ -807,10 +831,9 @@ class RTBSA(QMainWindow):
             self.ui.listWidget.setDisabled(True)
         else:
             self.ui.common1.setEnabled(False)
-        self.commonactivated()
+        self.inputActivated()
 
-    #
-    def commonactivated(self):
+    def inputActivated(self):
         if not self.abort:
             self.stop()
             self.timer.singleShot(150, self.on_draw)
@@ -823,7 +846,7 @@ class RTBSA(QMainWindow):
             self.ui.listWidget_2.setDisabled(True)
         else:
             self.ui.common2.setEnabled(False)
-        self.commonactivated()
+        self.inputActivated()
 
     def line_click(self):
         self.ui.parab_cb.setChecked(False)
@@ -831,7 +854,7 @@ class RTBSA(QMainWindow):
         self.ui.label.setDisabled(True)
         self.reinitialize_plot()
 
-    def fitorderactivated(self):
+    def fitOrderActivated(self):
         try:
             self.fitorder = int(self.ui.fitedit.text())
         except ValueError:

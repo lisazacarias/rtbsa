@@ -86,7 +86,7 @@
                  <item>
                   <widget class="QRadioButton" name="enter1_rb">
                    <property name="text">
-                    <string>Enter:</string>
+                    <string>Search:</string>
                    </property>
                    <property name="checked">
                     <bool>false</bool>
@@ -156,7 +156,7 @@
                  <item>
                   <widget class="QRadioButton" name="enter2_rb">
                    <property name="text">
-                    <string>Enter:</string>
+                    <string>Search:</string>
                    </property>
                    <property name="checked">
                     <bool>false</bool>
