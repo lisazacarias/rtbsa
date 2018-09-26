@@ -429,7 +429,7 @@ class RTBSA(QMainWindow):
             if updateExistingPlot:
                 self.parab.setData(sorted1, fit)
             else:
-                self.parab = pg.PlotCurveItem(xdata, fit, pen=3)
+                self.parab = pg.PlotCurveItem(sorted1, fit, pen=3, size=2)
 
             if self.fitorder == 2:
                 self.slope_text.setText('Peak: ' + str(-co[1] / (2 * co[0])))
@@ -504,6 +504,7 @@ class RTBSA(QMainWindow):
         nans, x = np.isnan(newdata), lambda z: z.nonzero()[0]
         # interpolate nans
         newdata[nans] = np.interp(x(nans), x(~nans), newdata[~nans])
+        # remove DC component
         newdata = newdata - np.mean(newdata)
         newdata = newdata.tolist()
 
@@ -595,6 +596,14 @@ class RTBSA(QMainWindow):
             self.filteredBufferA = list(compress(self.dataBufferA, mask))
             self.filteredBufferB = list(compress(self.dataBufferB, mask))
 
+    # This PV gets insane values, apparently
+    def filterPeakCurrent(self):
+        filterFunc = lambda x: x < 12000
+        if self.devices["A"] == "BLEN:LI24:886:BIMAXHSTBR":
+            self.filterData(self.dataBufferA, filterFunc, True)
+        if self.devices["B"] == "BLEN:LI24:886:BIMAXHSTBR":
+            self.filterData(self.dataBufferB, filterFunc, True)
+
     def filterNans(self):
         filterFunc = lambda x: not np.isnan(x)
         self.filterData(self.dataBufferA, filterFunc, True)
@@ -675,6 +684,7 @@ class RTBSA(QMainWindow):
 
         self.adjustVals()
         self.filterNans()
+        self.filterPeakCurrent()
 
         if self.ui.filterByStdDevs.isChecked():
             self.filterStdDev()
