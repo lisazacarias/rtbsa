@@ -92,12 +92,12 @@ class RTBSA(QMainWindow):
         self.ui.enter2_rb.clicked.connect(self.enter_2_click)
 
         # TODO ask Chris if we can remove this functionality
-        # Triggers a redrawing upon pressing enter in the search bar
+        # Triggers a redrawing upon pressing enter in the search bar.
         # Proper usage should be using the search bar to search, and selecting
         # from the results in the list. If it's not in the list, it's an invalid
         # PV with no reason to attempt plotting
-        self.ui.enter1.returnPressed.connect(self.inputActivated)
-        self.ui.enter2.returnPressed.connect(self.inputActivated)
+        # self.ui.enter1.returnPressed.connect(self.inputActivated)
+        # self.ui.enter2.returnPressed.connect(self.inputActivated)
 
         # Pressing enter in the text input boxes for points and std dev triggers
         # updating the plot
@@ -423,13 +423,13 @@ class RTBSA(QMainWindow):
         try:
             co = polyfit(xdata, ydata, self.fitorder)
             pol = poly1d(co)
-            sorted1 = sorted(xdata)
-            fit = pol(sorted1)
+            xdataSorted = sorted(xdata)
+            fit = pol(xdataSorted)
 
             if updateExistingPlot:
-                self.parab.setData(sorted1, fit)
+                self.parab.setData(xdataSorted, fit)
             else:
-                self.parab = pg.PlotCurveItem(sorted1, fit, pen=3, size=2)
+                self.parab = pg.PlotCurveItem(xdataSorted, fit, pen=3, size=2)
 
             if self.fitorder == 2:
                 self.slope_text.setText('Peak: ' + str(-co[1] / (2 * co[0])))
