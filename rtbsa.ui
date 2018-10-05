@@ -43,7 +43,7 @@
           <property name="maximumSize">
            <size>
             <width>310</width>
-            <height>240</height>
+            <height>270</height>
            </size>
           </property>
           <property name="styleSheet">
@@ -113,7 +113,7 @@
           <property name="maximumSize">
            <size>
             <width>310</width>
-            <height>240</height>
+            <height>270</height>
            </size>
           </property>
           <property name="styleSheet">
@@ -183,7 +183,7 @@
           <property name="maximumSize">
            <size>
             <width>310</width>
-            <height>240</height>
+            <height>270</height>
            </size>
           </property>
           <property name="palette">
@@ -242,7 +242,7 @@
                  <property name="maximumSize">
                   <size>
                    <width>60</width>
-                   <height>30</height>
+                   <height>24</height>
                   </size>
                  </property>
                  <property name="palette">
@@ -337,7 +337,7 @@
                  <property name="maximumSize">
                   <size>
                    <width>50</width>
-                   <height>25</height>
+                   <height>24</height>
                   </size>
                  </property>
                  <property name="palette">
@@ -394,6 +394,12 @@
               <layout class="QHBoxLayout" name="horizontalLayout_9">
                <item>
                 <widget class="QCheckBox" name="filterByStdDevs">
+                 <property name="maximumSize">
+                  <size>
+                   <width>16777215</width>
+                   <height>24</height>
+                  </size>
+                 </property>
                  <property name="palette">
                   <palette>
                    <active>
@@ -458,7 +464,7 @@
                  <property name="maximumSize">
                   <size>
                    <width>20</width>
-                   <height>25</height>
+                   <height>24</height>
                   </size>
                  </property>
                  <property name="palette">
@@ -512,64 +518,67 @@
               </layout>
              </item>
              <item>
-              <layout class="QVBoxLayout" name="verticalLayout_12">
-               <item>
-                <widget class="QPushButton" name="draw_button">
-                 <property name="minimumSize">
-                  <size>
-                   <width>95</width>
-                   <height>43</height>
-                  </size>
-                 </property>
-                 <property name="text">
-                  <string>Start</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QPushButton" name="stop_button">
-                 <property name="minimumSize">
-                  <size>
-                   <width>95</width>
-                   <height>43</height>
-                  </size>
-                 </property>
-                 <property name="text">
-                  <string>Stop</string>
-                 </property>
-                </widget>
-               </item>
-              </layout>
+              <widget class="QPushButton" name="draw_button">
+               <property name="minimumSize">
+                <size>
+                 <width>95</width>
+                 <height>45</height>
+                </size>
+               </property>
+               <property name="styleSheet">
+                <string notr="true"/>
+               </property>
+               <property name="text">
+                <string>Start</string>
+               </property>
+              </widget>
              </item>
              <item>
-              <layout class="QVBoxLayout" name="verticalLayout_4">
-               <item>
-                <widget class="QPushButton" name="log_button">
-                 <property name="minimumSize">
-                  <size>
-                   <width>95</width>
-                   <height>24</height>
-                  </size>
-                 </property>
-                 <property name="text">
-                  <string>LCLS Log</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QPushButton" name="mcclog_button">
-                 <property name="minimumSize">
-                  <size>
-                   <width>95</width>
-                   <height>24</height>
-                  </size>
-                 </property>
-                 <property name="text">
-                  <string>MCC Log</string>
-                 </property>
-                </widget>
-               </item>
-              </layout>
+              <widget class="QPushButton" name="stop_button">
+               <property name="minimumSize">
+                <size>
+                 <width>95</width>
+                 <height>45</height>
+                </size>
+               </property>
+               <property name="styleSheet">
+                <string notr="true"/>
+               </property>
+               <property name="text">
+                <string>Stop</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="log_button">
+               <property name="minimumSize">
+                <size>
+                 <width>95</width>
+                 <height>24</height>
+                </size>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">background-color: rgb(85, 255, 255);
+color: rgb(0, 0, 0);
+</string>
+               </property>
+               <property name="text">
+                <string>LCLS Log</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="mcclog_button">
+               <property name="minimumSize">
+                <size>
+                 <width>95</width>
+                 <height>24</height>
+                </size>
+               </property>
+               <property name="text">
+                <string>MCC Log</string>
+               </property>
+              </widget>
              </item>
             </layout>
            </item>

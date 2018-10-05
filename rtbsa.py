@@ -10,7 +10,7 @@ import numpy as np
 from numpy import polyfit, poly1d, polyval, corrcoef, std, mean
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
-from subprocess import CalledProcessError
+from subprocess import CalledProcessError, check_output, PIPE
 from itertools import compress
 
 from logbook import *
