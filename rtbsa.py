@@ -412,21 +412,29 @@ class RTBSA(QMainWindow):
                                             blength - self.numpoints:blength]
 
     # noinspection PyTypeChecker
-    def clearAndUpdateCallback(self, device, suffix, callback, pvName):
+    def clearAndUpdateCallback(self, device, suffix, callback, pvName,
+                               resetTime=False):
+        self.clearPV(device)
+
+        # Without the time parameter, we wouldn't get the timestamp
+        self.pvObjects[device] = PV(pvName + suffix, form='time')
+
+        if resetTime:
+            self.timeStamps[device] = None
+
+        self.pvObjects[device].add_callback(callback)
+
+    def clearPV(self, device):
         pv = self.pvObjects[device]
         if pv:
             pv.clear_callbacks()
             pv.disconnect()
 
-        # Without the time parameter, we wouldn't get the timestamp
-        self.pvObjects[device] = PV(pvName + suffix, form='time')
-        self.pvObjects[device].add_callback(callback)
-
-    def clearAndUpdateCallbacks(self, suffix):
+    def clearAndUpdateCallbacks(self, suffix, resetTime=False):
         self.clearAndUpdateCallback("A", suffix, self.callbackA,
-                                    self.devices["A"])
+                                    self.devices["A"], resetTime)
         self.clearAndUpdateCallback("B", suffix, self.callbackB,
-                                    self.devices["B"])
+                                    self.devices["B"], resetTime)
 
     def updateValsFromInput(self):
 
@@ -438,14 +446,12 @@ class RTBSA(QMainWindow):
                                     self.ui.enter2_rb, self.ui.enter2, "B"):
             return False
 
-        self.synchronizedBuffers["A"], self.synchronizedBuffers["B"] = [], []
-
         self.statusBar().showMessage('Initializing/Syncing (be patient, '
                                      + 'may take 5 seconds)...')
 
         # Initial population of our buffers using the HSTBR PV's in our
         # callback functions
-        self.clearAndUpdateCallbacks("HSTBR")
+        self.clearAndUpdateCallbacks("HSTBR", True)
 
         while ((not self.timeStamps["A"] or not self.timeStamps["B"])
                and not self.abort):
