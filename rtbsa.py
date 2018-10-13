@@ -1,5 +1,5 @@
 #!/usr/local/lcls/package/python/current/bin/python
-# Written by Zimmer, refactored by Lisa
+# Written by Zimmer, edited by Ahmed, refactored by Lisa
 
 import sys
 import time
@@ -795,11 +795,22 @@ class RTBSA(QMainWindow):
 
         choppedBuffer = self.rawBuffers["A"][2800 - self.numpoints:2800]
         mask = [not np.isnan(x) for x in choppedBuffer]
+        ydata = list(compress(choppedBuffer, mask))
+        xdata = list(compress(self.plotAttributes["xdata"], mask))
+
+        if self.ui.filterByStdDevs.isChecked():
+
+            stdDevFilterFunc = self.StdDevFilterFunc(mean(ydata),
+                                                     std(ydata))
+            mask = [stdDevFilterFunc(x) and not np.isnan(x)
+                    for x in ydata]
+        else:
+            mask = [not np.isnan(x) for x in ydata]
 
         # Filter out the NAN's from the ydata, and remove the corresponding
         # xdata points
-        ydata = list(compress(choppedBuffer, mask))
-        xdata = list(compress(self.plotAttributes["xdata"], mask))
+        ydata = list(compress(ydata, mask))
+        xdata = list(compress(xdata, mask))
 
         self.plotAttributes["curve"].setData(ydata)
         if self.ui.autoscale_cb.isChecked():
@@ -1116,7 +1127,7 @@ class RTBSA(QMainWindow):
         # noinspection PyCallByClass
         QMessageBox.about(self, "About", msg.strip())
 
-
+# TODO I bless the rains down in Africa!
 def main():
     app = QApplication(sys.argv)
     window = RTBSA()
