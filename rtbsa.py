@@ -627,8 +627,10 @@ class RTBSA(QMainWindow):
 
         self.statusBar().showMessage('Running')
 
+    ############################################################################
     # Where the magic happens (well, where it starts to happen). This
     # initializes the BSA plotting and then starts a timer to update the plot.
+    ############################################################################
     def on_draw(self):
         plotTypeIsValid = (self.ui.AvsT_cb.isChecked()
                            or self.ui.AvsB.isChecked()
