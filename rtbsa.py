@@ -167,7 +167,7 @@ class RTBSA(QMainWindow):
         self.text = {"avg": None, "std": None, "slope": None, "corr": None}
 
         # All things plot related!
-        self.plotAttributes = {"curve": None, "xdata": None, "fit": None,
+        self.plotAttributes = {"curve": None, "xData": None, "fit": None,
                                "parab": None, "frequencies": None}
 
     def setUpGraph(self):
@@ -384,7 +384,7 @@ class RTBSA(QMainWindow):
 
         # Initializing our data by putting a callback on the history buffer PV
         self.clearAndUpdateCallback("A", "HSTBR", self.callbackA,
-                                    self.devices["A"])
+                                    self.devices["A"], True)
 
         while (not self.timeStamps["A"]) and not self.abort:
             QApplication.processEvents()
@@ -465,36 +465,36 @@ class RTBSA(QMainWindow):
 
         return True
 
-    def getLinearFit(self, xdata, ydata, updateExistingPlot):
+    def getLinearFit(self, xData, yData, updateExistingPlot):
         try:
             # noinspection PyTupleAssignmentBalance
-            m, b = polyfit(xdata, ydata, 1)
-            fitData = polyval([m, b], xdata)
+            m, b = polyfit(xData, yData, 1)
+            fitData = polyval([m, b], xData)
 
             self.text["slope"].setText('Slope: ' + str("{:.3e}".format(m)))
 
             if updateExistingPlot:
-                self.plotAttributes["fit"].setData(xdata, fitData)
+                self.plotAttributes["fit"].setData(xData, fitData)
             else:
                 # noinspection PyTypeChecker
-                self.plotAttributes["fit"] = pg.PlotCurveItem(xdata, fitData,
+                self.plotAttributes["fit"] = pg.PlotCurveItem(xData, fitData,
                                                               'g-', linewidth=1)
         except:
             print("Error getting linear fit")
             pass
 
-    def getPolynomialFit(self, xdata, ydata, updateExistingPlot):
+    def getPolynomialFit(self, xData, yData, updateExistingPlot):
         try:
-            co = polyfit(xdata, ydata, self.fitorder)
+            co = polyfit(xData, yData, self.fitorder)
             pol = poly1d(co)
-            xdataSorted = sorted(xdata)
-            fit = pol(xdataSorted)
+            xDataSorted = sorted(xData)
+            fit = pol(xDataSorted)
 
             if updateExistingPlot:
-                self.plotAttributes["parab"].setData(xdataSorted, fit)
+                self.plotAttributes["parab"].setData(xDataSorted, fit)
             else:
                 # noinspection PyTypeChecker
-                self.plotAttributes["parab"] = pg.PlotCurveItem(xdataSorted,
+                self.plotAttributes["parab"] = pg.PlotCurveItem(xDataSorted,
                                                                 fit, pen=3,
                                                                 size=2)
 
@@ -515,19 +515,19 @@ class RTBSA(QMainWindow):
             self.text["slope"].setText('Fit failed')
             pass
 
-    def plotFit(self, xdata, ydata, title):
+    def plotFit(self, xData, yData, title):
         self.plot.addItem(self.plotAttributes["curve"])
         self.plot.setTitle(title)
 
         # Fit line
         if self.ui.line_cb.isChecked():
-            self.getLinearFit(xdata, ydata, False)
+            self.getLinearFit(xData, yData, False)
             self.plot.addItem(self.plotAttributes["fit"])
 
         # Fit polynomial
         elif self.ui.parab_cb.isChecked():
             self.ui.fitedit.setDisabled(False)
-            self.getPolynomialFit(xdata, ydata, False)
+            self.getPolynomialFit(xData, yData, False)
             self.plot.addItem(self.plotAttributes["parab"])
 
     # noinspection PyTypeChecker
@@ -545,16 +545,16 @@ class RTBSA(QMainWindow):
         self.plotAttributes["curve"] = pg.PlotCurveItem(data, pen=1)
         self.plot.addItem(self.plotAttributes["curve"])
 
-        self.plotAttributes["xdata"] = range(self.numpoints)
+        self.plotAttributes["xData"] = range(self.numpoints)
 
-        self.plotFit(self.plotAttributes["xdata"], data, self.devices["A"])
+        self.plotFit(self.plotAttributes["xData"], data, self.devices["A"])
 
-    def plotCurveAndFit(self, xdata, ydata):
+    def plotCurveAndFit(self, xData, yData):
         # noinspection PyTypeChecker
-        self.plotAttributes["curve"] = pg.ScatterPlotItem(xdata, ydata, pen=1,
+        self.plotAttributes["curve"] = pg.ScatterPlotItem(xData, yData, pen=1,
                                                           symbol='x', size=5)
         self.plot.addItem(self.plotAttributes["curve"])
-        self.plotFit(xdata, ydata,
+        self.plotFit(xData, yData,
                      self.devices["B"] + ' vs. ' + self.devices["A"])
 
     def genABPlot(self):
@@ -663,19 +663,25 @@ class RTBSA(QMainWindow):
                                     self.ui.enter1_rb, self.ui.enter1, "A"):
                 self.genPlotAndSetTimer(self.genFFTPlot, self.update_plot_FFT)
 
+    @staticmethod
+    def filterBuffers(bufferToFilter, filterFunc, xData, yData):
+        mask = [filterFunc(x) for x in bufferToFilter]
+        return (list(compress(xData, mask)),
+                list(compress(yData, mask)))
+
     # Need to filter out errant indices from both buffers to keep them
     # synchronized
     def filterData(self, dataBuffer, filterFunc, changeOriginal):
-        mask = [filterFunc(x) for x in dataBuffer]
-        bufferA = self.synchronizedBuffers["A"]
-        bufferB = self.synchronizedBuffers["B"]
+        bufferA, bufferB = self.filterBuffers(dataBuffer, filterFunc,
+                                              self.synchronizedBuffers["A"],
+                                              self.synchronizedBuffers["B"])
 
         if changeOriginal:
-            self.synchronizedBuffers["A"] = list(compress(bufferA, mask))
-            self.synchronizedBuffers["B"] = list(compress(bufferB, mask))
+            self.synchronizedBuffers["A"] = bufferA
+            self.synchronizedBuffers["B"] = bufferB
         else:
-            self.filteredBuffers["A"] = list(compress(bufferA, mask))
-            self.filteredBuffers["B"] = list(compress(bufferB, mask))
+            self.filteredBuffers["A"] = bufferA
+            self.filteredBuffers["B"] = bufferB
 
     # This PV gets insane values, apparently
     def filterPeakCurrent(self):
@@ -794,51 +800,43 @@ class RTBSA(QMainWindow):
             return
 
         choppedBuffer = self.rawBuffers["A"][2800 - self.numpoints:2800]
-        mask = [not np.isnan(x) for x in choppedBuffer]
-        ydata = list(compress(choppedBuffer, mask))
-        xdata = list(compress(self.plotAttributes["xdata"], mask))
+        xData, yData = self.filterBuffers(choppedBuffer,
+                                          lambda x: not np.isnan(x),
+                                          self.plotAttributes["xData"],
+                                          choppedBuffer)
 
         if self.ui.filterByStdDevs.isChecked():
+            stdDevFilterFunc = self.StdDevFilterFunc(mean(yData), std(yData))
+            xData, yData = self.filterBuffers(yData, stdDevFilterFunc, xData,
+                                              yData)
 
-            stdDevFilterFunc = self.StdDevFilterFunc(mean(ydata),
-                                                     std(ydata))
-            mask = [stdDevFilterFunc(x) and not np.isnan(x)
-                    for x in ydata]
-        else:
-            mask = [not np.isnan(x) for x in ydata]
-
-        # Filter out the NAN's from the ydata, and remove the corresponding
-        # xdata points
-        ydata = list(compress(ydata, mask))
-        xdata = list(compress(xdata, mask))
-
-        self.plotAttributes["curve"].setData(ydata)
+        self.plotAttributes["curve"].setData(yData)
         if self.ui.autoscale_cb.isChecked():
-            mx = max(ydata)
-            mn = min(ydata)
+            mx = max(yData)
+            mn = min(yData)
             if mx - mn > .00001:
                 self.plot.setYRange(mn, mx)
-                self.plot.setXRange(0, len(ydata))
+                self.plot.setXRange(0, len(yData))
 
         if self.ui.avg_cb.isChecked():
-            self.setPosAndText(self.text["avg"], mean(ydata), 0, min(ydata),
+            self.setPosAndText(self.text["avg"], mean(yData), 0, min(yData),
                                'AVG: ')
 
         if self.ui.std_cb.isChecked():
-            self.setPosAndText(self.text["std"], std(ydata),
+            self.setPosAndText(self.text["std"], std(yData),
                                self.numpoints / 4,
-                               min(ydata), 'STD: ')
+                               min(yData), 'STD: ')
 
         if self.ui.corr_cb.isChecked():
             self.text["corr"].setText('')
 
         if self.ui.line_cb.isChecked():
-            self.text["slope"].setPos(self.numpoints / 2, min(ydata))
-            self.getLinearFit(xdata, ydata, True)
+            self.text["slope"].setPos(self.numpoints / 2, min(yData))
+            self.getLinearFit(xData, yData, True)
 
         elif self.ui.parab_cb.isChecked():
-            self.text["slope"].setPos(self.numpoints / 2, min(ydata))
-            self.getPolynomialFit(xdata, ydata, True)
+            self.text["slope"].setPos(self.numpoints / 2, min(yData))
+            self.getPolynomialFit(xData, yData, True)
 
         self.timer.singleShot(100, self.update_plot_HSTBR)
 
@@ -1049,23 +1047,28 @@ class RTBSA(QMainWindow):
     def MCCLog(self):
         MCCLog('/tmp/RTBSA.png', '/tmp/RTBSA.ps', self.plot.plotItem)
 
+    def clearCallbacks(self, device):
+        try:
+            self.pvObjects[device].clear_callbacks()
+            self.pvObjects[device].disconnect()
+        except:
+            self.statusBar().showMessage('Stopped')
+
+    def clearBuffers(self, device):
+        self.rawBuffers[device] = []
+        self.filteredBuffers[device] = []
+        self.synchronizedBuffers[device] = []
+    
     def stop(self):
         self.abort = True
         self.statusBar().showMessage('Stopped')
         self.ui.draw_button.setDisabled(False)
         QApplication.processEvents()
 
-        try:
-            self.pvObjects["A"].clear_callbacks()
-            self.pvObjects["A"].disconnect()
-        except:
-            self.statusBar().showMessage('Stopped')
-
-        try:
-            self.pvObjects["B"].clear_callbacks()
-            self.pvObjects["B"].disconnect()
-        except:
-            self.statusBar().showMessage('Stopped')
+        self.clearCallbacks("A")
+        self.clearCallbacks("B")
+        # self.clearBuffers("A")
+        # self.clearBuffers("B")
 
     def create_menu(self):
 
