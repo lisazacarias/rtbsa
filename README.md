@@ -7,4 +7,3 @@ optimize the correlation between signals.
 
 Real-Time BSA is written in Python, and depends on PyQt4 and pyqtgraph.
 
-Hello World!
