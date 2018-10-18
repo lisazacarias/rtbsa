@@ -15,7 +15,7 @@ commonlist = ['GDET:FEE1:241:ENRC', 'GDET:FEE1:242:ENRC',
               'BLD:SYS0:500:UND_ANG_X', 'BLD:SYS0:500:UND_POS_Y',
               'BLD:SYS0:500:UND_ANG_Y']
 
-bsapvs = ['ACCL:IN20:300:L0A_P',
+bsaPVs = ['ACCL:IN20:300:L0A_P',
           'ACCL:IN20:400:L0B_A',
           'ACCL:IN20:400:L0B_P',
           'ACCL:LI21:180:L1X_A',
