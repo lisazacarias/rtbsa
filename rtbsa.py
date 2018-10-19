@@ -6,12 +6,13 @@ import time
 
 from epics import PV
 
-import numpy as np
-from numpy import polyfit, poly1d, polyval, corrcoef, std, mean
+from numpy import (polyfit, poly1d, polyval, corrcoef, std, mean, concatenate,
+                   empty, append, nan, max as np_max, min as np_min, zeros,
+                   isnan, linalg, abs, fft, argsort, interp)
+
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
 from subprocess import CalledProcessError, check_output
-from itertools import compress
 
 from logbook import *
 from rtbsa_ui import Ui_RTBSA
@@ -117,6 +118,7 @@ class RTBSA(QMainWindow):
         # Backup for eget error
         except CalledProcessError:
             print("Unable to pull most recent PV list")
+            # bsaPVs is pulled from the Constants file
             self.bsapvs.extend(bsaPVs)
 
         for pv in self.bsapvs:
@@ -137,7 +139,7 @@ class RTBSA(QMainWindow):
         # Dropdown menu for device A (add common BSA PV's and make bunch length
         # the default selection)
         self.ui.common1.addItems(commonlist)
-        self.ui.common1.setCurrentIndex(21)
+        self.ui.common1.setCurrentIndex(commonlist.index("BLEN:LI24:886:BIMAX"))
         self.ui.common1.activated.connect(self.inputActivated)
 
         # Dropdown menu for device B
@@ -153,6 +155,8 @@ class RTBSA(QMainWindow):
         self.ui.corr_cb.clicked.connect(self.corr_click)
         self.ui.parab_cb.clicked.connect(self.parab_click)
         self.ui.line_cb.clicked.connect(self.line_click)
+
+        self.ui.grid_cb.clicked.connect(self.showGrid)
 
         # All the buttons in the Controls section
         self.ui.draw_button.clicked.connect(self.onDraw)
@@ -176,6 +180,10 @@ class RTBSA(QMainWindow):
         self.ui.points.returnPressed.connect(self.points_entered)
         self.ui.numStdDevs.returnPressed.connect(self.stdDevEntered)
 
+    def showGrid(self):
+        self.plot.showGrid(self.ui.grid_cb.isChecked(),
+                           self.ui.grid_cb.isChecked())
+
     def setUpGraph(self):
         layout = QGridLayout()
         self.ui.widget.setLayout(layout)
@@ -183,7 +191,7 @@ class RTBSA(QMainWindow):
         self.plot.showGrid(1, 1)
 
     def loadStyleSheet(self):
-        cssFile = "/home/physics/zimmerc/python/style.css"
+        cssFile = "style.css"
         try:
             with open(cssFile, "r") as f:
                 self.setStyleSheet(f.read())
@@ -402,8 +410,9 @@ class RTBSA(QMainWindow):
             self.timeStamps[device] = timestamp
 
             # value is the buffer because we're monitoring the HSTBR PV
-            self.rawBuffers[device] = value.tolist()
+            self.rawBuffers[device] = value
         else:
+            # return
             if not self.timeStamps[device]:
                 return
 
@@ -414,9 +423,15 @@ class RTBSA(QMainWindow):
                 return
 
             self.timeStamps[device] = timestamp
-            self.rawBuffers[device] = (self.rawBuffers[device][elapsed_points:]
-                                       + ([np.nan] * (elapsed_points - 1))
-                                       + [value])
+
+            nanArray = empty(elapsed_points - 1)
+            nanArray[:] = nan
+
+            truncatedData = self.rawBuffers[device][elapsed_points:]
+
+            baseArray = concatenate([truncatedData, nanArray])
+
+            self.rawBuffers[device] = append(baseArray, value)
 
     def clearPV(self, device):
         pv = self.pvObjects[device]
@@ -538,7 +553,7 @@ class RTBSA(QMainWindow):
             self.ui.draw_button.setEnabled(True)
             return
 
-        data = newData[2800 - self.numpoints:2800]
+        data = newData[-self.numpoints:]
 
         self.plotAttributes["curve"] = pg.PlotCurveItem(data, pen=1)
         self.plot.addItem(self.plotAttributes["curve"])
@@ -553,9 +568,6 @@ class RTBSA(QMainWindow):
     # noinspection PyTypeChecker
     ############################################################################
     def updateTimePlotA(self):
-
-        self.plot.showGrid(self.ui.grid_cb.isChecked(),
-                           self.ui.grid_cb.isChecked())
 
         QApplication.processEvents()
 
@@ -596,10 +608,10 @@ class RTBSA(QMainWindow):
         self.timer.singleShot(self.updateTime, self.updateTimePlotA)
 
     def filterTimePlotBuffer(self):
-        choppedBuffer = self.rawBuffers["A"][2800 - self.numpoints:2800]
+        choppedBuffer = self.rawBuffers["A"][-self.numpoints:]
 
         xData, yData = self.filterBuffers(choppedBuffer,
-                                          lambda x: not np.isnan(x),
+                                          lambda x: not isnan(x),
                                           self.plotAttributes["xData"],
                                           choppedBuffer)
 
@@ -663,7 +675,7 @@ class RTBSA(QMainWindow):
                                            + str("+{:.2e}".format(co[2])) + 'x'
                                            + str("+{:.2e}".format(co[3])))
 
-        except np.linalg.linalg.LinAlgError:
+        except linalg.linalg.LinAlgError:
             print("Linear algebra error getting curve fit")
             pass
         except:
@@ -706,13 +718,10 @@ class RTBSA(QMainWindow):
     # every self.updateTime seconds
     ############################################################################
     def updatePlotAB(self):
-        QApplication.processEvents()
-
         if self.abort:
             return
 
-        self.plot.showGrid(self.ui.grid_cb.isChecked(),
-                           self.ui.grid_cb.isChecked())
+        QApplication.processEvents()
 
         self.adjustVals()
         self.filterNans()
@@ -729,7 +738,7 @@ class RTBSA(QMainWindow):
         self.timer.singleShot(self.updateTime, self.updatePlotAB)
 
     def filterNans(self):
-        def filterFunc(x): return not np.isnan(x)
+        def filterFunc(x): return ~isnan(x)
 
         self.filterData(self.synchronizedBuffers["A"], filterFunc, True)
         self.filterData(self.synchronizedBuffers["B"], filterFunc, True)
@@ -750,9 +759,8 @@ class RTBSA(QMainWindow):
 
     @staticmethod
     def filterBuffers(bufferToFilter, filterFunc, xData, yData):
-        mask = [filterFunc(x) for x in bufferToFilter]
-        return (list(compress(xData, mask)),
-                list(compress(yData, mask)))
+        mask = filterFunc(bufferToFilter)
+        return xData[mask], yData[mask]
 
     # This PV gets insane values, apparently
     def filterPeakCurrent(self):
@@ -813,14 +821,14 @@ class RTBSA(QMainWindow):
             self.getPolynomialFit(bufferA, bufferB, True)
 
     def setPlotRanges(self, bufferA, bufferB):
-        mx = np.max(bufferB)
-        mn = np.min(bufferB)
+        mx = np_max(bufferB)
+        mn = np_min(bufferB)
 
         if mn != mx:
             self.plot.setYRange(mn, mx)
 
-        mx = np.max(bufferA)
-        mn = np.min(bufferA)
+        mx = np_max(bufferA)
+        mn = np_min(bufferA)
 
         if mn != mx:
             self.plot.setXRange(mn, mx)
@@ -831,28 +839,26 @@ class RTBSA(QMainWindow):
     # TODO I have no idea what's happening here
     def genPlotFFT(self, newdata, updateExistingPlot):
 
-        if not newdata:
+        if not newdata.size:
             return None
 
-        newdata = newdata[2800 - self.numpoints:2800]
+        newdata = newdata[-self.numpoints:]
 
-        newdata = np.array(newdata)
-        nans, x = np.isnan(newdata), lambda z: z.nonzero()[0]
+        nans, x = isnan(newdata), lambda z: z.nonzero()[0]
         # interpolate nans
-        newdata[nans] = np.interp(x(nans), x(~nans), newdata[~nans])
+        newdata[nans] = interp(x(nans), x(~nans), newdata[~nans])
         # remove DC component
-        newdata = newdata - np.mean(newdata)
-        newdata = newdata.tolist()  # type: np.ndarray
+        newdata = newdata - mean(newdata)
 
-        newdata.extend(np.zeros(self.numpoints * 2).tolist())
+        newdata = concatenate([newdata, zeros(self.numpoints * 2)])
 
-        ps = np.abs(np.fft.fft(newdata)) / len(newdata)
+        ps = abs(fft.fft(newdata)) / newdata.size
 
-        frequencies = np.fft.fftfreq(len(newdata), 1.0 / self.updateRate())
+        frequencies = fft.fftfreq(newdata.size, 1.0 / self.updateRate())
         keep = (frequencies >= 0)
         ps = ps[keep]
         frequencies = frequencies[keep]
-        idx = np.argsort(frequencies)
+        idx = argsort(frequencies)
 
         if updateExistingPlot:
             self.plotAttributes["curve"].setData(x=frequencies[idx], y=ps[idx])
@@ -920,8 +926,6 @@ class RTBSA(QMainWindow):
     # every self.updateTime seconds
     ############################################################################
     def updatePlotFFT(self):
-        self.plot.showGrid(self.ui.grid_cb.isChecked(),
-                           self.ui.grid_cb.isChecked())
         QApplication.processEvents()
 
         if self.abort:
