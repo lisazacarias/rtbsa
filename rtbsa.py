@@ -52,7 +52,7 @@ class RTBSA(QMainWindow):
         self.stdDevstoKeep = 3.0
 
         # 20ms polling time
-        self.updateTime = 50
+        self.updateTime = 20
 
         # Set initial polynomial fit to 2
         self.fitOrder = 2
@@ -87,19 +87,21 @@ class RTBSA(QMainWindow):
         # The times when each buffer finished its last data acquisition
         self.timeStamps = {"A": None, "B": None}
 
-        self.synchronizedBuffers = {"A": [], "B": []}
+        self.synchronizedBuffers = {"A": empty(2800), "B": empty(2800)}
 
         # Versions of data buffers A and B that are filtered by standard
         # deviation. Didn't want to edit those buffers directly so that we could
-        # unfliter or refilter with a different number more efficiently
-        self.filteredBuffers = {"A": [], "B": []}
+        # unfilter or refilter with a different number more efficiently
+        self.filteredBuffers = {"A": empty(2800), "B": empty(2800)}
 
         # Text objects that appear on the plot
         self.text = {"avg": None, "std": None, "slope": None, "corr": None}
 
         # All things plot related!
-        self.plotAttributes = {"curve": None, "xData": None, "fit": None,
+        self.plotAttributes = {"curve": None, "xData": empty(2800), "fit": None,
                                "parab": None, "frequencies": None}
+
+        self.counter = {"A": 0, "B": 0}
 
     def getRate(self):
         return self.rateDict[self.ratePV.value]
@@ -416,6 +418,8 @@ class RTBSA(QMainWindow):
 
             # value is the buffer because we're monitoring the HSTBR PV
             self.rawBuffers[device] = value
+            self.counter[device] = 0
+
         else:
             if not self.timeStamps[device]:
                 return
@@ -436,6 +440,7 @@ class RTBSA(QMainWindow):
             baseArray = concatenate([truncatedData, nanArray])
 
             self.rawBuffers[device] = np_append(baseArray, value)
+            self.counter[device] += (elapsed_points)
 
     def clearPV(self, device):
         pv = self.pvObjects[device]
@@ -483,7 +488,7 @@ class RTBSA(QMainWindow):
     # first n elements of one and the last n elements of the other. See the
     # diagram below, where the dotted line represents the time axis (one buffer
     # is contained  by square brackets [], the other by curly braces {}, and the
-    # times where each starts  and ends is indicated right underneath).
+    # times where each starts and ends is indicated right underneath).
     #
     #
     #          [           {                            ]           }
@@ -491,7 +496,7 @@ class RTBSA(QMainWindow):
     #       t1_start    t2_start                     t1_end      t2_end
     #
     #
-    # Note that both buffers are of the same size (self.numpoints) so that:
+    # Note that both buffers are of the same size (2800) so that:
     # (t1_end - t1_start) = (t2_end - t2_start)
     #
     # From the diagram, we see that only the time between t2_start and t1_end
@@ -506,9 +511,7 @@ class RTBSA(QMainWindow):
     # seconds * (shots/second) = (number of shots)
     ############################################################################
     def setValSynced(self):
-        numBadShots = self.updateRate() * (self.timeStamps["B"]
-                                           - self.timeStamps["A"])
-        numBadShots = int(round(numBadShots))
+        numBadShots = self.counter["B"] - self.counter["A"]
 
         startA, endA = self.getIndices(numBadShots, 1)
         startB, endB = self.getIndices(numBadShots, -1)
@@ -521,7 +524,7 @@ class RTBSA(QMainWindow):
     # The @ is an annotation symbol that tells the interpreter something about
     # the thing it's annotating. In this case, it's telling us that getIndices
     # is a static method, meaning that it doesn't do anything with class
-    # variables (there's no need for a "self" parameter)
+    # variables (i.e. there's no need for a "self" parameter)
     @staticmethod
     def getIndices(numBadShots, mult):
         # Gets opposite indices depending on which time is greater (and [0:2800]
@@ -641,6 +644,32 @@ class RTBSA(QMainWindow):
             # noinspection PyTupleAssignmentBalance
             m, b = polyfit(xData, yData, 1)
             fitData = polyval([m, b], xData)
+            # if self.printNext and abs(m) >= 3e-04:
+            #     print "Good fit"
+            #     print self.numBadShots
+            #     print self.startA
+            #     print self.endA
+            #     print self.startB
+            #     print self.endB
+            #     print "x index: " + str(where(xData==self.sampleXVal))
+            #     print "y index: " + str(where(yData == self.sampleYVal))
+            #     print self.elapsedPoints
+            #     print self.rawBuffers["A"][-20:]
+            #     print self.rawBuffers["B"][-20:]
+            #     self.printNext = False
+            # if abs(m) < 3e-04:
+            #     print "Bad fit"
+            #     print self.numBadShots
+            #     print self.startA
+            #     print self.endA
+            #     print self.startB
+            #     print self.endB
+            #     print self.elapsedPoints
+            #     self.sampleXVal = xData[-150]
+            #     self.sampleYVal = yData[-150]
+            #     print self.rawBuffers["A"][-20:]
+            #     print self.rawBuffers["B"][-20:]
+            #     self.printNext = True
 
             self.text["slope"].setText('Slope: ' + str("{:.3e}".format(m)))
 
@@ -724,6 +753,10 @@ class RTBSA(QMainWindow):
     def updatePlotAB(self):
         if self.abort:
             return
+
+        # kill switch to prevent potential buffer overflow
+        if self.counter["A"] > sys.maxsize - 1000:
+            self.stop()
 
         QApplication.processEvents()
 
