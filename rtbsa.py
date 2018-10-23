@@ -7,15 +7,18 @@ import time
 from epics import PV
 
 from numpy import (polyfit, poly1d, polyval, corrcoef, std, mean, concatenate,
-                   empty, append, nan, max as np_max, min as np_min, zeros,
-                   isnan, linalg, abs, fft, argsort, interp)
+                   empty, append as np_append, nan, zeros, isnan, linalg, abs,
+                   fft, argsort, interp, arange, nanmin, nanmax)
 
-from PyQt4.QtCore import *
-from PyQt4.QtGui import *
+from PyQt4.QtCore import QTimer, QObject, SIGNAL, Qt
+from PyQt4.QtGui import (QMainWindow, QLabel, QGridLayout, QPalette,
+                         QApplication, QAction, QFileDialog, QIcon, QMessageBox)
+
+from scipy.stats import nanmean, nanstd
 from subprocess import CalledProcessError, check_output
 
 from logbook import *
-from rtbsa_ui import Ui_RTBSA
+from rtbsa_UI import Ui_RTBSA
 from Constants import *
 
 PEAK_CURRENT_LIMIT = 12000
@@ -79,7 +82,7 @@ class RTBSA(QMainWindow):
         self.pvObjects = {"A": None, "B": None}
 
         # The raw, unsynchronized, unfiltered buffers
-        self.rawBuffers = {"A": [], "B": []}
+        self.rawBuffers = {"A": empty(2800), "B": empty(2800)}
 
         # The times when each buffer finished its last data acquisition
         self.timeStamps = {"A": None, "B": None}
@@ -97,6 +100,9 @@ class RTBSA(QMainWindow):
         # All things plot related!
         self.plotAttributes = {"curve": None, "xData": None, "fit": None,
                                "parab": None, "frequencies": None}
+
+    def getRate(self):
+        return self.rateDict[self.ratePV.value]
 
     def disableInputs(self):
         self.ui.fitedit.setDisabled(True)
@@ -155,7 +161,6 @@ class RTBSA(QMainWindow):
         self.ui.corr_cb.clicked.connect(self.corr_click)
         self.ui.parab_cb.clicked.connect(self.parab_click)
         self.ui.line_cb.clicked.connect(self.line_click)
-
         self.ui.grid_cb.clicked.connect(self.showGrid)
 
         # All the buttons in the Controls section
@@ -412,12 +417,11 @@ class RTBSA(QMainWindow):
             # value is the buffer because we're monitoring the HSTBR PV
             self.rawBuffers[device] = value
         else:
-            # return
             if not self.timeStamps[device]:
                 return
 
             elapsed_time = (timestamp - self.timeStamps[device])
-            elapsed_points = int(round(elapsed_time * self.updateRate()))
+            elapsed_points = int(round(elapsed_time * self.getRate()))
 
             if elapsed_points <= 0:
                 return
@@ -431,7 +435,7 @@ class RTBSA(QMainWindow):
 
             baseArray = concatenate([truncatedData, nanArray])
 
-            self.rawBuffers[device] = append(baseArray, value)
+            self.rawBuffers[device] = np_append(baseArray, value)
 
     def clearPV(self, device):
         pv = self.pvObjects[device]
@@ -440,8 +444,6 @@ class RTBSA(QMainWindow):
             pv.disconnect()
 
     def adjustVals(self):
-        self.updateRate()
-
         numBadShots = self.setValSynced()
         blength = 2800 - numBadShots
 
@@ -504,8 +506,9 @@ class RTBSA(QMainWindow):
     # seconds * (shots/second) = (number of shots)
     ############################################################################
     def setValSynced(self):
-        numBadShots = int(round((self.timeStamps["B"] - self.timeStamps["A"])
-                                * self.updateRate()))
+        numBadShots = self.updateRate() * (self.timeStamps["B"]
+                                           - self.timeStamps["A"])
+        numBadShots = int(round(numBadShots))
 
         startA, endA = self.getIndices(numBadShots, 1)
         startB, endB = self.getIndices(numBadShots, -1)
@@ -523,7 +526,8 @@ class RTBSA(QMainWindow):
     def getIndices(numBadShots, mult):
         # Gets opposite indices depending on which time is greater (and [0:2800]
         # if they're equal)
-        return max(0, mult * numBadShots), min(2800, 2800 + mult * numBadShots)
+        return (max(0, mult * numBadShots),
+                min(2800, 2800 + (mult * numBadShots)))
 
     def genPlotAndSetTimer(self, genPlot, updateMethod):
         if self.abort:
@@ -547,7 +551,7 @@ class RTBSA(QMainWindow):
     def genTimePlotA(self):
         newData = self.initializeData()
 
-        if not newData:
+        if not newData.size:
             self.statusBar().showMessage('Invalid PV? Unable to get data.'
                                          + ' Aborting.', 10000)
             self.ui.draw_button.setEnabled(True)
@@ -558,7 +562,7 @@ class RTBSA(QMainWindow):
         self.plotAttributes["curve"] = pg.PlotCurveItem(data, pen=1)
         self.plot.addItem(self.plotAttributes["curve"])
 
-        self.plotAttributes["xData"] = range(self.numpoints)
+        self.plotAttributes["xData"] = arange(self.numpoints)
 
         self.plotFit(self.plotAttributes["xData"], data, self.devices["A"])
 
@@ -576,7 +580,7 @@ class RTBSA(QMainWindow):
 
         xData, yData = self.filterTimePlotBuffer()
 
-        if yData:
+        if yData.size:
             self.plotAttributes["curve"].setData(yData)
             if self.ui.autoscale_cb.isChecked():
                 mx = max(yData)
@@ -611,7 +615,7 @@ class RTBSA(QMainWindow):
         choppedBuffer = self.rawBuffers["A"][-self.numpoints:]
 
         xData, yData = self.filterBuffers(choppedBuffer,
-                                          lambda x: not isnan(x),
+                                          lambda x: ~isnan(x),
                                           self.plotAttributes["xData"],
                                           choppedBuffer)
 
@@ -715,7 +719,7 @@ class RTBSA(QMainWindow):
 
     ############################################################################
     # This is the main plotting function for "Plot B vs A" that gets called
-    # every self.updateTime seconds
+    # every self.updateTime milliseconds
     ############################################################################
     def updatePlotAB(self):
         if self.abort:
@@ -726,6 +730,8 @@ class RTBSA(QMainWindow):
         self.adjustVals()
         self.filterNans()
         self.filterPeakCurrent()
+
+        # print self.synchronizedBuffers
 
         if self.ui.filterByStdDevs.isChecked():
             self.filterStdDev()
@@ -789,46 +795,51 @@ class RTBSA(QMainWindow):
     def updateLabelsAndFit(self, bufferA, bufferB):
         self.plotAttributes["curve"].setData(bufferA, bufferB)
 
-        self.setPlotRanges(bufferA, bufferB)
+        if self.ui.autoscale_cb.isChecked():
+            self.setPlotRanges(bufferA, bufferB)
 
         # Logic to determine positions of labels when not running autoscale
+        minBufferA = nanmin(bufferA)
+        minBufferB = nanmin(bufferB)
+        maxBufferA = nanmax(bufferA)
+        maxBufferB = nanmax(bufferB)
+
         if self.ui.avg_cb.isChecked():
-            self.setPosAndText(self.text["avg"], mean(bufferB), min(bufferA),
-                               min(bufferB), 'AVG: ')
+            self.setPosAndText(self.text["avg"], nanmean(bufferB), minBufferA,
+                               minBufferB, 'AVG: ')
 
         if self.ui.std_cb.isChecked():
-            val1Min = min(bufferA)
-            xPos = (val1Min + (val1Min + max(bufferA)) / 2) / 2
+            xPos = (minBufferA + (minBufferA + maxBufferA) / 2) / 2
 
-            self.setPosAndText(self.text["std"], std(bufferB), xPos,
-                               min(bufferB),
+            self.setPosAndText(self.text["std"], nanstd(bufferB), xPos,
+                               minBufferB,
                                'STD: ')
 
         if self.ui.corr_cb.isChecked():
             correlation = corrcoef(bufferA, bufferB)
             self.setPosAndText(self.text["corr"], correlation.item(1),
-                               min(bufferA), max(bufferB),
+                               minBufferA, maxBufferB,
                                "Corr. Coefficient: ")
 
         if self.ui.line_cb.isChecked():
-            self.text["slope"].setPos((min(bufferA) + max(bufferA)) / 2,
-                                      min(bufferB))
+            self.text["slope"].setPos((minBufferA + maxBufferA) / 2,
+                                      minBufferB)
             self.getLinearFit(bufferA, bufferB, True)
 
         elif self.ui.parab_cb.isChecked():
-            self.text["slope"].setPos((min(bufferA) + max(bufferA)) / 2,
-                                      min(bufferB))
+            self.text["slope"].setPos((minBufferA + maxBufferA) / 2,
+                                      minBufferB)
             self.getPolynomialFit(bufferA, bufferB, True)
 
     def setPlotRanges(self, bufferA, bufferB):
-        mx = np_max(bufferB)
-        mn = np_min(bufferB)
+        mx = nanmax(bufferB)
+        mn = nanmin(bufferB)
 
         if mn != mx:
             self.plot.setYRange(mn, mx)
 
-        mx = np_max(bufferA)
-        mn = np_min(bufferA)
+        mx = nanmax(bufferA)
+        mn = nanmin(bufferA)
 
         if mn != mx:
             self.plot.setXRange(mn, mx)
