@@ -337,12 +337,16 @@ class RTBSA(QMainWindow):
             if pv and pv in self.bsapvs:
                 self.devices[device] = pv
             else:
-                self.statusBar().showMessage('Device ' + device
-                                             + ' invalid. Aborting.', 10000)
+                self.printStatus('Device ' + device + ' invalid. Aborting.',
+                                 10000)
                 self.ui.draw_button.setEnabled(True)
                 return False
 
         return True
+
+    def printStatus(self,  message):
+        print message
+        self.statusBar().showMessage(message)
 
     def updateValsFromInput(self):
 
@@ -354,8 +358,8 @@ class RTBSA(QMainWindow):
                                     self.ui.enter2_rb, self.ui.enter2, "B"):
             return False
 
-        self.statusBar().showMessage('Initializing/Syncing (be patient, '
-                                     + 'may take 5 seconds)...')
+        self.printStatus('Initializing/Syncing (be patient may take 5 '
+                          'seconds)...')
 
         # Initial population of our buffers using the HSTBR PV's in our
         # callback functions
@@ -365,23 +369,26 @@ class RTBSA(QMainWindow):
                and not self.abort):
             QApplication.processEvents()
 
-        self.adjustVals()
+        self.adjustVals(True)
 
         # Switch to BR PVs to avoid pulling an entire history buffer on every
         # update.
-        self.clearAndUpdateCallbacks("BR")
+        self.clearAndUpdateCallbacks("BR", resetRawBuffer=True)
 
         return True
 
-    def clearAndUpdateCallbacks(self, suffix, resetTime=False):
+    def clearAndUpdateCallbacks(self, suffix, resetTime=False,
+                                resetRawBuffer=False):
         self.clearAndUpdateCallback("A", suffix, self.callbackA,
-                                    self.devices["A"], resetTime)
+                                    self.devices["A"], resetTime,
+                                    resetRawBuffer)
         self.clearAndUpdateCallback("B", suffix, self.callbackB,
-                                    self.devices["B"], resetTime)
+                                    self.devices["B"], resetTime,
+                                    resetRawBuffer)
 
     # noinspection PyTypeChecker
     def clearAndUpdateCallback(self, device, suffix, callback, pvName,
-                               resetTime=False):
+                               resetTime=False, resetRawBuffer=False):
         self.clearPV(device)
 
         # Without the time parameter, we wouldn't get the timestamp
@@ -389,6 +396,12 @@ class RTBSA(QMainWindow):
 
         if resetTime:
             self.timeStamps[device] = None
+
+        if resetRawBuffer:
+            nanArray = empty(2800 - self.synchronizedBuffers[device].size)
+            nanArray[:] = nan
+            self.rawBuffers[device] = concatenate([self.synchronizedBuffers[device],
+                                                   nanArray])
 
         self.pvObjects[device].add_callback(callback)
 
@@ -440,7 +453,7 @@ class RTBSA(QMainWindow):
             baseArray = concatenate([truncatedData, nanArray])
 
             self.rawBuffers[device] = np_append(baseArray, value)
-            self.counter[device] += (elapsed_points)
+            self.counter[device] += elapsed_points
 
     def clearPV(self, device):
         pv = self.pvObjects[device]
@@ -448,8 +461,8 @@ class RTBSA(QMainWindow):
             pv.clear_callbacks()
             pv.disconnect()
 
-    def adjustVals(self):
-        numBadShots = self.setValSynced()
+    def adjustVals(self, syncByTime=False):
+        numBadShots = self.setValSynced(syncByTime)
         blength = 2800 - numBadShots
 
         # Make sure the buffer size doesn't exceed the desired number of points
@@ -472,11 +485,10 @@ class RTBSA(QMainWindow):
 
             if time.time() - start_time > 1:
                 gotStuckAndNeedToUpdateMessage = True
-                self.statusBar().showMessage("Waiting for beam rate to be at "
-                                             "least 1Hz...")
+                self.printStatus("Waiting for beam rate to be at least 1Hz...")
 
         if gotStuckAndNeedToUpdateMessage:
-            self.statusBar().showMessage("Beam rate at allowed value")
+            self.printStatus("Beam rate at allowed value")
 
         return self.rateDict[self.ratePV.value]
 
@@ -510,8 +522,13 @@ class RTBSA(QMainWindow):
     # multiply the time delta by the beam rate (yay dimensional analysis!):
     # seconds * (shots/second) = (number of shots)
     ############################################################################
-    def setValSynced(self):
-        numBadShots = self.counter["B"] - self.counter["A"]
+    def setValSynced(self, syncByTime):
+        if syncByTime:
+            numBadShots = int(round((self.timeStamps["B"]
+                                     - self.timeStamps["A"])
+                                    * self.updateRate()))
+        else:
+            numBadShots = self.counter["B"] - self.counter["A"]
 
         startA, endA = self.getIndices(numBadShots, 1)
         startB, endB = self.getIndices(numBadShots, -1)
@@ -539,8 +556,7 @@ class RTBSA(QMainWindow):
         try:
             genPlot()
         except UnboundLocalError:
-            self.statusBar().showMessage('No Data, Aborting Plotting Algorithm',
-                                         10000)
+            self.printStatus('No Data, Aborting Plotting Algorithm', 10000)
             return
 
         self.timer = QTimer(self)
@@ -548,15 +564,14 @@ class RTBSA(QMainWindow):
         # Run updateMethod every updatetime milliseconds
         self.timer.singleShot(self.updateTime, updateMethod)
 
-        self.statusBar().showMessage('Running')
+        self.printStatus('Running')
 
     # noinspection PyTypeChecker
     def genTimePlotA(self):
         newData = self.initializeData()
 
         if not newData.size:
-            self.statusBar().showMessage('Invalid PV? Unable to get data.'
-                                         + ' Aborting.', 10000)
+            self.printStatus('Invalid PV? Unable to get data. Aborting.', 10000)
             self.ui.draw_button.setEnabled(True)
             return
 
@@ -644,32 +659,6 @@ class RTBSA(QMainWindow):
             # noinspection PyTupleAssignmentBalance
             m, b = polyfit(xData, yData, 1)
             fitData = polyval([m, b], xData)
-            # if self.printNext and abs(m) >= 3e-04:
-            #     print "Good fit"
-            #     print self.numBadShots
-            #     print self.startA
-            #     print self.endA
-            #     print self.startB
-            #     print self.endB
-            #     print "x index: " + str(where(xData==self.sampleXVal))
-            #     print "y index: " + str(where(yData == self.sampleYVal))
-            #     print self.elapsedPoints
-            #     print self.rawBuffers["A"][-20:]
-            #     print self.rawBuffers["B"][-20:]
-            #     self.printNext = False
-            # if abs(m) < 3e-04:
-            #     print "Bad fit"
-            #     print self.numBadShots
-            #     print self.startA
-            #     print self.endA
-            #     print self.startB
-            #     print self.endB
-            #     print self.elapsedPoints
-            #     self.sampleXVal = xData[-150]
-            #     self.sampleYVal = yData[-150]
-            #     print self.rawBuffers["A"][-20:]
-            #     print self.rawBuffers["B"][-20:]
-            #     self.printNext = True
 
             self.text["slope"].setText('Slope: ' + str("{:.3e}".format(m)))
 
@@ -754,8 +743,8 @@ class RTBSA(QMainWindow):
         if self.abort:
             return
 
-        # kill switch to prevent potential buffer overflow
-        if self.counter["A"] > sys.maxsize - 1000:
+        # kill switch to stop backgrounded, forgetten GUIs
+        if self.counter["A"] > 1000000:
             self.stop()
 
         QApplication.processEvents()
