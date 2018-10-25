@@ -72,8 +72,7 @@ class RTBSA(QMainWindow):
         self.rateDict = {0: None, 1: 0.0, 2: 1.0, 3: 10.0, 4: 30.0, 5: 60.0,
                          6: 120.0}
 
-        self.menuBar().setStyleSheet(
-            'QWidget{background-color:grey;color:purple}')
+        self.menuBar().setStyleSheet('QWidget{background-color:grey;color:purple}')
         self.create_menu()
         self.create_status_bar()
 
@@ -145,11 +144,13 @@ class RTBSA(QMainWindow):
         self.ui.listWidget.itemClicked.connect(self.setEnterA)
         self.ui.listWidget_2.itemClicked.connect(self.setEnterB)
 
-        # Dropdown menu for device A (add common BSA PV's and make bunch length
-        # the default selection)
+        # Dropdown menu for device A (add common BSA PV's)
         self.ui.common1.addItems(Constants.commonlist)
-        self.ui.common1.setCurrentIndex(
-            Constants.commonlist.index("BLEN:LI24:886:BIMAX"))
+
+        # Make bunch length default selection
+        index = Constants.commonlist.index("BLEN:LI24:886:BIMAX")
+        self.ui.common1.setCurrentIndex(index)
+
         self.ui.common1.activated.connect(self.inputActivated)
 
         # Dropdown menu for device B
@@ -272,7 +273,7 @@ class RTBSA(QMainWindow):
             self.correctStdDevs('Enter a float > 0', 3.0)
             return
 
-        # Is there a way to combine an except and an if?
+        # TODO Is there a way to combine an except and an if?
         if self.stdDevstoKeep <= 0:
             self.correctStdDevs('Enter a float > 0', 3.0)
             return
@@ -371,7 +372,7 @@ class RTBSA(QMainWindow):
 
         # Initial population of our buffers using the HSTBR PV's in our
         # callback functions
-        self.clearAndUpdateCallbacks("HSTBR", True)
+        self.clearAndUpdateCallbacks("HSTBR", resetTime=True)
 
         while ((not self.timeStamps["A"] or not self.timeStamps["B"])
                and not self.abort):
@@ -405,12 +406,13 @@ class RTBSA(QMainWindow):
         if resetTime:
             self.timeStamps[device] = None
 
+        # Make sure that the initial raw buffer is synchronized and pad with
+        # nans if it's less than 2800 points long
         if resetRawBuffer:
             nanArray = empty(2800 - self.synchronizedBuffers[device].size)
             nanArray[:] = nan
-            self.rawBuffers[device] = concatenate(
-                [self.synchronizedBuffers[device],
-                 nanArray])
+            self.rawBuffers[device] = concatenate([self.synchronizedBuffers[device],
+                                                   nanArray])
 
         self.pvObjects[device].add_callback(callback)
 
@@ -440,6 +442,8 @@ class RTBSA(QMainWindow):
 
             # value is the buffer because we're monitoring the HSTBR PV
             self.rawBuffers[device] = value
+
+            # Reset the counter every time we reinitialize the plot
             self.counter[device] = 0
 
         else:
@@ -462,6 +466,9 @@ class RTBSA(QMainWindow):
             baseArray = concatenate([truncatedData, nanArray])
 
             self.rawBuffers[device] = np_append(baseArray, value)
+
+            # Increment the counter by the number of values that have been
+            # appended
             self.counter[device] += elapsed_points
 
     def clearPV(self, device):
@@ -530,6 +537,12 @@ class RTBSA(QMainWindow):
     # (it's the same number for both since they're both the same size), we
     # multiply the time delta by the beam rate (yay dimensional analysis!):
     # seconds * (shots/second) = (number of shots)
+    #
+    # That whole rigmarole only applies to the initial population of the buffers
+    # (where we're pulling the entire history buffer at once using the HSTBR
+    # suffix). From then on, we're appending each point individually and keeping
+    # count of how many have been appended, so the number of shots that need to
+    # be chopped is simply the difference between the two counters
     ############################################################################
     def setValSynced(self, syncByTime):
         if syncByTime:
@@ -547,14 +560,42 @@ class RTBSA(QMainWindow):
 
         return abs(numBadShots)
 
-    # The @ is an annotation symbol that tells the interpreter something about
-    # the thing it's annotating. In this case, it's telling us that getIndices
-    # is a static method, meaning that it doesn't do anything with class
-    # variables (i.e. there's no need for a "self" parameter)
+    ############################################################################
+    # A function that decides which indices to keep for each buffer. Using k to
+    # denote the absolute value of the difference between the buffers, we get:
+    #
+    # Case 1: numBadShots is negative (buffer A is ahead and has had more
+    #         points appended)
+    #
+    #       Case A: The multiplier for A's indices is 1, so:
+    #
+    #               max(0, mult * numBadShots) -> max(0, -k) -> 0
+    #
+    #               min(2800, 2800 + (mult * numBadShots))
+    #               -> min(2800, 2800 - k) -> 2800-k
+    #
+    #               And we get [0, 2800-k] for buffer A
+    #
+    #       Case B: The multiplier for B's indices is -1, so:
+    #
+    #               max(0, mult * numBadShots) -> max(0, k) -> k
+    #
+    #               min(2800, 2800 + (mult * numBadShots))
+    #               -> min(2800, 2800 + k) -> 2800
+    #
+    #               And we get [k, 2800] for buffer B
+    #
+    # Case 2: Using similar logic, the inverse is true when numBadShots is
+    #         positive
+    #
+    # Side note, the @ is an annotation symbol that tells the interpreter
+    # something about the thing it's annotating. In this case, it's telling us
+    # that getIndices is a static method, meaning that it doesn't do anything
+    # with class variables (i.e. there's no need for a "self" parameter)
+    ############################################################################
     @staticmethod
     def getIndices(numBadShots, mult):
-        # Gets opposite indices depending on which time is greater (and [0:2800]
-        # if they're equal)
+
         return (max(0, mult * numBadShots),
                 min(2800, 2800 + (mult * numBadShots)))
 
@@ -752,8 +793,10 @@ class RTBSA(QMainWindow):
         if self.abort:
             return
 
-        # kill switch to stop backgrounded, forgetten GUIs
-        if self.counter["A"] > 1000000:
+        # kill switch to stop backgrounded, forgetten GUIs. Somewhere in the
+        # ballpark of 15 minutes assuming 120Hz
+        if self.counter["A"] > 110000:
+            self.printStatus("Stopping due to inactivity")
             self.stop()
 
         QApplication.processEvents()
@@ -830,7 +873,6 @@ class RTBSA(QMainWindow):
         if self.ui.autoscale_cb.isChecked():
             self.setPlotRanges(bufferA, bufferB)
 
-        # Logic to determine positions of labels when not running autoscale
         minBufferA = nanmin(bufferA)
         minBufferB = nanmin(bufferB)
         maxBufferA = nanmax(bufferA)
