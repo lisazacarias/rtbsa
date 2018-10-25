@@ -6,6 +6,7 @@ import time
 
 from epics import PV
 
+# TODO import these with the namespace
 from numpy import (polyfit, poly1d, polyval, corrcoef, std, mean, concatenate,
                    empty, append as np_append, nan, zeros, isnan, linalg, abs,
                    fft, argsort, interp, arange, nanmin, nanmax)
@@ -19,7 +20,7 @@ from subprocess import CalledProcessError, check_output
 
 from logbook import *
 from rtbsa_UI import Ui_RTBSA
-from Constants import *
+import Constants
 
 PEAK_CURRENT_LIMIT = 12000
 
@@ -127,7 +128,7 @@ class RTBSA(QMainWindow):
         except CalledProcessError:
             print("Unable to pull most recent PV list")
             # bsaPVs is pulled from the Constants file
-            self.bsapvs.extend(bsaPVs)
+            self.bsapvs.extend(Constants.bsaPVs)
 
         for pv in self.bsapvs:
             self.ui.listWidget.addItem(pv)
@@ -146,12 +147,13 @@ class RTBSA(QMainWindow):
 
         # Dropdown menu for device A (add common BSA PV's and make bunch length
         # the default selection)
-        self.ui.common1.addItems(commonlist)
-        self.ui.common1.setCurrentIndex(commonlist.index("BLEN:LI24:886:BIMAX"))
+        self.ui.common1.addItems(Constants.commonlist)
+        self.ui.common1.setCurrentIndex(
+            Constants.commonlist.index("BLEN:LI24:886:BIMAX"))
         self.ui.common1.activated.connect(self.inputActivated)
 
         # Dropdown menu for device B
-        self.ui.common2.addItems(commonlist)
+        self.ui.common2.addItems(Constants.commonlist)
         self.ui.common2.activated.connect(self.inputActivated)
 
         # All the checkboxes in the Settings section
@@ -186,6 +188,13 @@ class RTBSA(QMainWindow):
         # updating the plot
         self.ui.points.returnPressed.connect(self.points_entered)
         self.ui.numStdDevs.returnPressed.connect(self.stdDevEntered)
+
+        # Triggers a redrawing upon pressing enter in the search bar.
+        # Proper usage should be using the search bar to search, and selecting
+        # from the results in the list. If it's not in the list, it's an invalid
+        # PV with no reason to attempt plotting
+        self.ui.enter1.returnPressed.connect(self.inputActivated)
+        self.ui.enter2.returnPressed.connect(self.inputActivated)
 
     def showGrid(self):
         self.plot.showGrid(self.ui.grid_cb.isChecked(),
@@ -337,14 +346,13 @@ class RTBSA(QMainWindow):
             if pv and pv in self.bsapvs:
                 self.devices[device] = pv
             else:
-                self.printStatus('Device ' + device + ' invalid. Aborting.',
-                                 10000)
+                self.printStatus('Device ' + device + ' invalid. Aborting.')
                 self.ui.draw_button.setEnabled(True)
                 return False
 
         return True
 
-    def printStatus(self,  message):
+    def printStatus(self, message):
         print message
         self.statusBar().showMessage(message)
 
@@ -359,7 +367,7 @@ class RTBSA(QMainWindow):
             return False
 
         self.printStatus('Initializing/Syncing (be patient may take 5 '
-                          'seconds)...')
+                         'seconds)...')
 
         # Initial population of our buffers using the HSTBR PV's in our
         # callback functions
@@ -400,8 +408,9 @@ class RTBSA(QMainWindow):
         if resetRawBuffer:
             nanArray = empty(2800 - self.synchronizedBuffers[device].size)
             nanArray[:] = nan
-            self.rawBuffers[device] = concatenate([self.synchronizedBuffers[device],
-                                                   nanArray])
+            self.rawBuffers[device] = concatenate(
+                [self.synchronizedBuffers[device],
+                 nanArray])
 
         self.pvObjects[device].add_callback(callback)
 
@@ -556,7 +565,7 @@ class RTBSA(QMainWindow):
         try:
             genPlot()
         except UnboundLocalError:
-            self.printStatus('No Data, Aborting Plotting Algorithm', 10000)
+            self.printStatus('No Data, Aborting Plotting Algorithm')
             return
 
         self.timer = QTimer(self)
@@ -571,7 +580,7 @@ class RTBSA(QMainWindow):
         newData = self.initializeData()
 
         if not newData.size:
-            self.printStatus('Invalid PV? Unable to get data. Aborting.', 10000)
+            self.printStatus('Invalid PV? Unable to get data. Aborting.')
             self.ui.draw_button.setEnabled(True)
             return
 
@@ -792,7 +801,8 @@ class RTBSA(QMainWindow):
 
     # This PV gets insane values, apparently
     def filterPeakCurrent(self):
-        def filterFunc(x): return x < PEAK_CURRENT_LIMIT
+        def filterFunc(x):
+            return x < PEAK_CURRENT_LIMIT
 
         if self.devices["A"] == "BLEN:LI24:886:BIMAX":
             self.filterData(self.synchronizedBuffers["A"], filterFunc, True)
@@ -1146,7 +1156,7 @@ class RTBSA(QMainWindow):
         self.rawBuffers[device] = []
         self.filteredBuffers[device] = []
         self.synchronizedBuffers[device] = []
-    
+
     def stop(self):
         self.abort = True
         self.statusBar().showMessage('Stopped')
