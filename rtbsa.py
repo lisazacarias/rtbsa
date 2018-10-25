@@ -1058,6 +1058,7 @@ class RTBSA(QMainWindow):
             self.ui.common2_rb.setChecked(True)
             self.ui.common2.setDisabled(False)
         self.stop()
+        self.timer.singleShot(250, self.onDraw)
 
     def AFFTClick(self):
         if not self.ui.AFFT.isChecked():
