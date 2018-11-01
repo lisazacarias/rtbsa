@@ -53,7 +53,7 @@ class RTBSA(QMainWindow):
         self.stdDevstoKeep = 3.0
 
         # 20ms polling time
-        self.updateTime = 20
+        self.updateTime = 50
 
         # Set initial polynomial fit to 2
         self.fitOrder = 2
@@ -102,6 +102,7 @@ class RTBSA(QMainWindow):
                                "parab": None, "frequencies": None}
 
         self.counter = {"A": 0, "B": 0}
+        self.pulseID = {"A": 0, "B": 0}
 
     def getRate(self):
         return self.rateDict[self.ratePV.value]
@@ -243,7 +244,7 @@ class RTBSA(QMainWindow):
         QObject.connect(enter, SIGNAL("textChanged(const QString&)"), search)
         if not self.abort and enter_rb.isChecked():
             self.stop()
-            self.onDraw()
+            self.timer.singleShot(250, self.onDraw)
 
     def setEnterA(self):
         self.setEnter(self.ui.listWidget, self.ui.enter1, self.searchA,
@@ -378,7 +379,7 @@ class RTBSA(QMainWindow):
                and not self.abort):
             QApplication.processEvents()
 
-        self.adjustVals(True)
+        self.populateSynchronizedBuffers(True)
 
         # Switch to BR PVs to avoid pulling an entire history buffer on every
         # update.
@@ -418,13 +419,15 @@ class RTBSA(QMainWindow):
 
     # Callback function for Device A
     # noinspection PyUnusedLocal
-    def callbackA(self, pvname=None, value=None, timestamp=None, **kw):
-        self.updateTimeAndBuffer("A", pvname, timestamp, value)
+    def callbackA(self, pvname=None, value=None, timestamp=None,
+                  nanoseconds=None, **kw):
+        self.updateTimeAndBuffer("A", pvname, timestamp, value, nanoseconds)
 
     # Callback function for Device B
     # noinspection PyUnusedLocal
-    def callbackB(self, pvname=None, value=None, timestamp=None, **kw):
-        self.updateTimeAndBuffer("B", pvname, timestamp, value)
+    def callbackB(self, pvname=None, value=None, timestamp=None,
+                  nanoseconds=None, **kw):
+        self.updateTimeAndBuffer("B", pvname, timestamp, value, nanoseconds)
 
     ############################################################################
     # This is where the data is actually acquired and saved to the buffers.
@@ -436,8 +439,12 @@ class RTBSA(QMainWindow):
     # put on the history buffer of that PV (denoted by the HSTBR suffix), so
     # that we just immediately write the previous 2800 points to our raw buffer
     ############################################################################
-    def updateTimeAndBuffer(self, device, pvname, timestamp, value):
-        if pvname[-5:] == 'HSTBR':
+    def updateTimeAndBuffer(self, device, pvname, timestamp, value,
+                            nanoseconds):
+
+        pulseID = (nanoseconds & 0xFFFF)
+
+        if "HSTBR" in pvname:
             self.timeStamps[device] = timestamp
 
             # value is the buffer because we're monitoring the HSTBR PV
@@ -445,31 +452,35 @@ class RTBSA(QMainWindow):
 
             # Reset the counter every time we reinitialize the plot
             self.counter[device] = 0
+            self.pulseID[device] = pulseID
 
         else:
             if not self.timeStamps[device]:
                 return
 
-            elapsed_time = (timestamp - self.timeStamps[device])
-            elapsed_points = int(round(elapsed_time * self.getRate()))
+            # The factor of 3 is because the pulse ID increments by 3 instead of
+            # 1 for time slot reasons (expects 360Hz, gets 120)
+            elapsedPulses = (pulseID - self.pulseID[device]) / 3
 
-            if elapsed_points <= 0:
+            # The pulse ID wraps around fairly frequently for some reason (on
+            # the order of every few minutes)
+            if elapsedPulses <= 0:
+                self.pulseID[device] = pulseID
                 return
 
+            # Pad the buffer with nans for missed pulses
+            elif elapsedPulses > 1:
+                lastIdx = (self.pulseID[device] / 3)
+                for idx in xrange(lastIdx, (pulseID / 3)):
+                    self.rawBuffers[device][idx % 2800] = nan
+
+            self.pulseID[device] = pulseID
+
+            # Directly index into the raw buffer using the pulse ID
+            self.rawBuffers[device][(pulseID / 3) % 2800] = value
+
+            self.counter[device] += elapsedPulses
             self.timeStamps[device] = timestamp
-
-            nanArray = empty(elapsed_points - 1)
-            nanArray[:] = nan
-
-            truncatedData = self.rawBuffers[device][elapsed_points:]
-
-            baseArray = concatenate([truncatedData, nanArray])
-
-            self.rawBuffers[device] = np_append(baseArray, value)
-
-            # Increment the counter by the number of values that have been
-            # appended
-            self.counter[device] += elapsed_points
 
     def clearPV(self, device):
         pv = self.pvObjects[device]
@@ -477,7 +488,7 @@ class RTBSA(QMainWindow):
             pv.clear_callbacks()
             pv.disconnect()
 
-    def adjustVals(self, syncByTime=False):
+    def populateSynchronizedBuffers(self, syncByTime=False):
         numBadShots = self.setValSynced(syncByTime)
         blength = 2800 - numBadShots
 
@@ -540,25 +551,26 @@ class RTBSA(QMainWindow):
     #
     # That whole rigmarole only applies to the initial population of the buffers
     # (where we're pulling the entire history buffer at once using the HSTBR
-    # suffix). From then on, we're appending each point individually and keeping
-    # count of how many have been appended, so the number of shots that need to
-    # be chopped is simply the difference between the two counters
+    # suffix). From then on, we're indexing into the raw buffers using the
+    # pulse ID modulo 2800, so they're inherently synchronized
     ############################################################################
     def setValSynced(self, syncByTime):
         if syncByTime:
             numBadShots = int(round((self.timeStamps["B"]
                                      - self.timeStamps["A"])
                                     * self.updateRate()))
+
+            startA, endA = self.getIndices(numBadShots, 1)
+            startB, endB = self.getIndices(numBadShots, -1)
+
+            self.synchronizedBuffers["A"] = self.rawBuffers["A"][startA:endA]
+            self.synchronizedBuffers["B"] = self.rawBuffers["B"][startB:endB]
+
+            return abs(numBadShots)
         else:
-            numBadShots = self.counter["B"] - self.counter["A"]
-
-        startA, endA = self.getIndices(numBadShots, 1)
-        startB, endB = self.getIndices(numBadShots, -1)
-
-        self.synchronizedBuffers["A"] = self.rawBuffers["A"][startA:endA]
-        self.synchronizedBuffers["B"] = self.rawBuffers["B"][startB:endB]
-
-        return abs(numBadShots)
+            self.synchronizedBuffers["A"] = self.rawBuffers["A"]
+            self.synchronizedBuffers["B"] = self.rawBuffers["B"]
+            return 0
 
     ############################################################################
     # A function that decides which indices to keep for each buffer. Using k to
@@ -801,7 +813,7 @@ class RTBSA(QMainWindow):
 
         QApplication.processEvents()
 
-        self.adjustVals()
+        self.populateSynchronizedBuffers()
         self.filterNans()
         self.filterPeakCurrent()
 
@@ -1111,7 +1123,7 @@ class RTBSA(QMainWindow):
     def inputActivated(self):
         if not self.abort:
             self.stop()
-            self.timer.singleShot(self.updateTime, self.onDraw)
+            self.timer.singleShot(250, self.onDraw)
 
     def common_2_click(self):
         if self.ui.common2_rb.isChecked():
