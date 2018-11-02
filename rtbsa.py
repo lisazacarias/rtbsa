@@ -4,7 +4,7 @@
 import sys
 import time
 
-from epics import PV
+from epics import PV, ca
 
 # TODO import these with the namespace
 from numpy import (polyfit, poly1d, polyval, corrcoef, std, mean, concatenate,
@@ -29,6 +29,7 @@ PEAK_CURRENT_LIMIT = 12000
 class RTBSA(QMainWindow):
 
     def __init__(self, parent=None):
+        # ca.PREEMPTIVE_CALLBACK=False
         QMainWindow.__init__(self, parent)
         self.help_menu = self.menuBar().addMenu("&Help")
         self.file_menu = self.menuBar().addMenu("&File")
@@ -69,7 +70,7 @@ class RTBSA(QMainWindow):
         # IOC:IN20:EV01:RG01_ACTRATE returns one of 7 states, 0 through 6, where
         # 0 is NULL (unclear what that means, but doesn't sound good), 1 is 0Hz,
         # 2 is 1Hz, 3 is 10Hz, 4 is 30Hz, 5 is 60Hz, and 6 is 120Hz
-        self.rateDict = {0: None, 1: 0.0, 2: 1.0, 3: 10.0, 4: 30.0, 5: 60.0,
+        self.rateDict = {0: 0.0, 1: 0.0, 2: 1.0, 3: 10.0, 4: 30.0, 5: 60.0,
                          6: 120.0}
 
         self.menuBar().setStyleSheet('QWidget{background-color:grey;color:purple}')
@@ -170,7 +171,7 @@ class RTBSA(QMainWindow):
         self.ui.grid_cb.clicked.connect(self.showGrid)
 
         # All the buttons in the Controls section
-        self.ui.draw_button.clicked.connect(self.onDraw)
+        self.ui.draw_button.clicked.connect(self.initializePlot)
         self.ui.stop_button.clicked.connect(self.stop)
         self.ui.log_button.clicked.connect(self.logbook)
         self.ui.mcclog_button.clicked.connect(self.MCCLog)
@@ -244,7 +245,7 @@ class RTBSA(QMainWindow):
         QObject.connect(enter, SIGNAL("textChanged(const QString&)"), search)
         if not self.abort and enter_rb.isChecked():
             self.stop()
-            self.timer.singleShot(250, self.onDraw)
+            self.timer.singleShot(250, self.initializePlot)
 
     def setEnterA(self):
         self.setEnter(self.ui.listWidget, self.ui.enter1, self.searchA,
@@ -300,7 +301,7 @@ class RTBSA(QMainWindow):
     # Where the magic happens (well, where it starts to happen). This
     # initializes the BSA plotting and then starts a timer to update the plot.
     ############################################################################
-    def onDraw(self):
+    def initializePlot(self):
         plotTypeIsValid = (self.ui.AvsT_cb.isChecked()
                            or self.ui.AvsB.isChecked()
                            or self.ui.AFFT.isChecked())
@@ -354,8 +355,9 @@ class RTBSA(QMainWindow):
 
         return True
 
-    def printStatus(self, message):
-        print message
+    def printStatus(self, message, printToXterm=True):
+        if printToXterm:
+            print message
         self.statusBar().showMessage(message)
 
     def updateValsFromInput(self):
@@ -380,6 +382,7 @@ class RTBSA(QMainWindow):
             QApplication.processEvents()
 
         self.populateSynchronizedBuffers(True)
+        print "populated synchronized buffers"
 
         # Switch to BR PVs to avoid pulling an entire history buffer on every
         # update.
@@ -400,6 +403,7 @@ class RTBSA(QMainWindow):
     def clearAndUpdateCallback(self, device, suffix, callback, pvName,
                                resetTime=False, resetRawBuffer=False):
         self.clearPV(device)
+        print "cleared callback " + device
 
         # Without the time parameter, we wouldn't get the timestamp
         self.pvObjects[device] = PV(pvName + suffix, form='time')
@@ -414,8 +418,10 @@ class RTBSA(QMainWindow):
             nanArray[:] = nan
             self.rawBuffers[device] = concatenate([self.synchronizedBuffers[device],
                                                    nanArray])
+            print "reset buffer " + device
 
         self.pvObjects[device].add_callback(callback)
+        print "added callback " + device + " " + suffix
 
     # Callback function for Device A
     # noinspection PyUnusedLocal
@@ -453,6 +459,7 @@ class RTBSA(QMainWindow):
             # Reset the counter every time we reinitialize the plot
             self.counter[device] = 0
             self.pulseID[device] = pulseID
+            print "initial population " + device
 
         else:
             if not self.timeStamps[device]:
@@ -460,9 +467,12 @@ class RTBSA(QMainWindow):
 
             # The factor of 3 is because the pulse ID increments by 3 instead of
             # 1 for time slot reasons (expects 360Hz, gets 120)
+            rate = self.getRate()
+            if rate < 1:
+                return
+
             scalingFactor = 3 * (120 / int(self.getRate()))
             elapsedPulses = (pulseID - self.pulseID[device]) / scalingFactor
-            # print elapsedPulses
 
             # The pulse ID wraps around fairly frequently for some reason (on
             # the order of every few minutes)
@@ -474,15 +484,12 @@ class RTBSA(QMainWindow):
             elif elapsedPulses > 1:
                 lastIdx = (self.pulseID[device] / scalingFactor)
                 for idx in xrange(lastIdx, (pulseID / scalingFactor)):
-                    print "idx: " + str(idx % 2800)
                     self.rawBuffers[device][idx % 2800] = nan
 
             self.pulseID[device] = pulseID
 
             # Directly index into the raw buffer using the pulse ID
             self.rawBuffers[device][(pulseID / scalingFactor) % 2800] = value
-            print (pulseID / scalingFactor) % 2800
-            # print value
 
             self.counter[device] += elapsedPulses
             self.timeStamps[device] = timestamp
@@ -490,8 +497,12 @@ class RTBSA(QMainWindow):
     def clearPV(self, device):
         pv = self.pvObjects[device]
         if pv:
+            pv.clear_auto_monitor()
+            print "cleared auto monitor " + device
             pv.clear_callbacks()
+            print "cleared callbacks " + device
             pv.disconnect()
+            print "disconnected " + device
 
     def populateSynchronizedBuffers(self, syncByTime=False):
         numBadShots = self.setValSynced(syncByTime)
@@ -505,7 +516,7 @@ class RTBSA(QMainWindow):
                                             blength - self.numpoints:blength]
 
     # A spin loop that waits until the beam rate is at least 1Hz
-    def updateRate(self):
+    def waitForRate(self):
 
         start_time = time.time()
         gotStuckAndNeedToUpdateMessage = False
@@ -517,10 +528,11 @@ class RTBSA(QMainWindow):
 
             if time.time() - start_time > 1:
                 gotStuckAndNeedToUpdateMessage = True
-                self.printStatus("Waiting for beam rate to be at least 1Hz...")
+                self.printStatus("Waiting for beam rate to be at least 1Hz...",
+                                 False)
 
         if gotStuckAndNeedToUpdateMessage:
-            self.printStatus("Beam rate at allowed value")
+            self.printStatus("Running", False)
 
         return self.rateDict[self.ratePV.value]
 
@@ -563,7 +575,7 @@ class RTBSA(QMainWindow):
         if syncByTime:
             numBadShots = int(round((self.timeStamps["B"]
                                      - self.timeStamps["A"])
-                                    * self.updateRate()))
+                                    * self.waitForRate()))
 
             startA, endA = self.getIndices(numBadShots, 1)
             startB, endB = self.getIndices(numBadShots, -1)
@@ -810,6 +822,8 @@ class RTBSA(QMainWindow):
         if self.abort:
             return
 
+        self.waitForRate()
+
         # kill switch to stop backgrounded, forgetten GUIs. Somewhere in the
         # ballpark of 15 minutes assuming 120Hz
         if self.counter["A"] > 110000:
@@ -956,7 +970,7 @@ class RTBSA(QMainWindow):
 
         ps = abs(fft.fft(newdata)) / newdata.size
 
-        frequencies = fft.fftfreq(newdata.size, 1.0 / self.updateRate())
+        frequencies = fft.fftfreq(newdata.size, 1.0 / self.waitForRate())
         keep = (frequencies >= 0)
         ps = ps[keep]
         frequencies = frequencies[keep]
@@ -1075,7 +1089,7 @@ class RTBSA(QMainWindow):
             self.ui.common2_rb.setChecked(True)
             self.ui.common2.setDisabled(False)
         self.stop()
-        self.timer.singleShot(250, self.onDraw)
+        self.timer.singleShot(250, self.initializePlot)
 
     def AFFTClick(self):
         if not self.ui.AFFT.isChecked():
@@ -1128,7 +1142,7 @@ class RTBSA(QMainWindow):
     def inputActivated(self):
         if not self.abort:
             self.stop()
-            self.timer.singleShot(250, self.onDraw)
+            self.timer.singleShot(250, self.initializePlot)
 
     def common_2_click(self):
         if self.ui.common2_rb.isChecked():
@@ -1218,13 +1232,12 @@ class RTBSA(QMainWindow):
         self.synchronizedBuffers[device] = []
 
     def stop(self):
+        self.clearCallbacks("A")
+        self.clearCallbacks("B")
         self.abort = True
         self.statusBar().showMessage('Stopped')
         self.ui.draw_button.setDisabled(False)
         QApplication.processEvents()
-
-        self.clearCallbacks("A")
-        self.clearCallbacks("B")
 
     def create_menu(self):
 
