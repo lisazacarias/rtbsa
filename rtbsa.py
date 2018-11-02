@@ -8,7 +8,7 @@ from epics import PV
 
 # TODO import these with the namespace
 from numpy import (polyfit, poly1d, polyval, corrcoef, std, mean, concatenate,
-                   empty, append as np_append, nan, zeros, isnan, linalg, abs,
+                   empty, nan, zeros, isnan, linalg, abs,
                    fft, argsort, interp, arange, nanmin, nanmax)
 
 from PyQt4.QtCore import QTimer, QObject, SIGNAL, Qt
@@ -460,7 +460,9 @@ class RTBSA(QMainWindow):
 
             # The factor of 3 is because the pulse ID increments by 3 instead of
             # 1 for time slot reasons (expects 360Hz, gets 120)
-            elapsedPulses = (pulseID - self.pulseID[device]) / 3
+            scalingFactor = 3 * (120 / int(self.getRate()))
+            elapsedPulses = (pulseID - self.pulseID[device]) / scalingFactor
+            # print elapsedPulses
 
             # The pulse ID wraps around fairly frequently for some reason (on
             # the order of every few minutes)
@@ -470,14 +472,17 @@ class RTBSA(QMainWindow):
 
             # Pad the buffer with nans for missed pulses
             elif elapsedPulses > 1:
-                lastIdx = (self.pulseID[device] / 3)
-                for idx in xrange(lastIdx, (pulseID / 3)):
+                lastIdx = (self.pulseID[device] / scalingFactor)
+                for idx in xrange(lastIdx, (pulseID / scalingFactor)):
+                    print "idx: " + str(idx % 2800)
                     self.rawBuffers[device][idx % 2800] = nan
 
             self.pulseID[device] = pulseID
 
             # Directly index into the raw buffer using the pulse ID
-            self.rawBuffers[device][(pulseID / 3) % 2800] = value
+            self.rawBuffers[device][(pulseID / scalingFactor) % 2800] = value
+            print (pulseID / scalingFactor) % 2800
+            # print value
 
             self.counter[device] += elapsedPulses
             self.timeStamps[device] = timestamp
