@@ -4,12 +4,14 @@
 import sys
 import time
 
-from epics import PV, ca
+from epics import PV
 
 # TODO import these with the namespace
+from multiprocessing.sharedctypes import RawArray
 from numpy import (polyfit, poly1d, polyval, corrcoef, std, mean, concatenate,
                    empty, nan, zeros, isnan, linalg, abs,
-                   fft, argsort, interp, arange, nanmin, nanmax)
+                   fft, argsort, interp, arange, nanmin, nanmax, frombuffer,
+                   copyto)
 
 from PyQt4.QtCore import QTimer, QObject, SIGNAL, Qt
 from PyQt4.QtGui import (QMainWindow, QLabel, QGridLayout, QPalette,
@@ -17,10 +19,12 @@ from PyQt4.QtGui import (QMainWindow, QLabel, QGridLayout, QPalette,
 
 from scipy.stats import nanmean, nanstd
 from subprocess import CalledProcessError, check_output
+from threading import Lock
 
 from logbook import *
 from rtbsa_UI import Ui_RTBSA
 import Constants
+
 
 PEAK_CURRENT_LIMIT = 12000
 
@@ -29,7 +33,6 @@ PEAK_CURRENT_LIMIT = 12000
 class RTBSA(QMainWindow):
 
     def __init__(self, parent=None):
-        # ca.PREEMPTIVE_CALLBACK=False
         QMainWindow.__init__(self, parent)
         self.help_menu = self.menuBar().addMenu("&Help")
         self.file_menu = self.menuBar().addMenu("&File")
@@ -103,7 +106,7 @@ class RTBSA(QMainWindow):
                                "parab": None, "frequencies": None}
 
         self.counter = {"A": 0, "B": 0}
-        self.pulseID = {"A": 0, "B": 0}
+        self.idx = {"A": 0, "B": 0}
 
     def getRate(self):
         return self.rateDict[self.ratePV.value]
@@ -403,7 +406,6 @@ class RTBSA(QMainWindow):
     def clearAndUpdateCallback(self, device, suffix, callback, pvName,
                                resetTime=False, resetRawBuffer=False):
         self.clearPV(device)
-        print "cleared callback " + device
 
         # Without the time parameter, we wouldn't get the timestamp
         self.pvObjects[device] = PV(pvName + suffix, form='time')
@@ -418,22 +420,18 @@ class RTBSA(QMainWindow):
             nanArray[:] = nan
             self.rawBuffers[device] = concatenate([self.synchronizedBuffers[device],
                                                    nanArray])
-            print "reset buffer " + device
 
         self.pvObjects[device].add_callback(callback)
-        print "added callback " + device + " " + suffix
 
     # Callback function for Device A
     # noinspection PyUnusedLocal
-    def callbackA(self, pvname=None, value=None, timestamp=None,
-                  nanoseconds=None, **kw):
-        self.updateTimeAndBuffer("A", pvname, timestamp, value, nanoseconds)
+    def callbackA(self, pvname=None, value=None, timestamp=None, **kw):
+        self.updateTimeAndBuffer("A", pvname, timestamp, value)
 
     # Callback function for Device B
     # noinspection PyUnusedLocal
-    def callbackB(self, pvname=None, value=None, timestamp=None,
-                  nanoseconds=None, **kw):
-        self.updateTimeAndBuffer("B", pvname, timestamp, value, nanoseconds)
+    def callbackB(self, pvname=None, value=None, timestamp=None, **kw):
+        self.updateTimeAndBuffer("B", pvname, timestamp, value)
 
     ############################################################################
     # This is where the data is actually acquired and saved to the buffers.
@@ -445,10 +443,9 @@ class RTBSA(QMainWindow):
     # put on the history buffer of that PV (denoted by the HSTBR suffix), so
     # that we just immediately write the previous 2800 points to our raw buffer
     ############################################################################
-    def updateTimeAndBuffer(self, device, pvname, timestamp, value,
-                            nanoseconds):
+    def updateTimeAndBuffer(self, device, pvname, timestamp, value):
 
-        pulseID = (nanoseconds & 0xFFFF)
+        idx = int((timestamp*100) % self.numpoints)
 
         if "HSTBR" in pvname:
             self.timeStamps[device] = timestamp
@@ -458,38 +455,33 @@ class RTBSA(QMainWindow):
 
             # Reset the counter every time we reinitialize the plot
             self.counter[device] = 0
-            self.pulseID[device] = pulseID
-            print "initial population " + device
+            self.idx[device] = idx
 
         else:
             if not self.timeStamps[device]:
                 return
 
-            # The factor of 3 is because the pulse ID increments by 3 instead of
-            # 1 for time slot reasons (expects 360Hz, gets 120)
             rate = self.getRate()
             if rate < 1:
                 return
 
-            scalingFactor = 3 * (120 / int(self.getRate()))
-            elapsedPulses = (pulseID - self.pulseID[device]) / scalingFactor
+            elapsedPulses = idx - self.idx[device]
 
-            # The pulse ID wraps around fairly frequently for some reason (on
-            # the order of every few minutes)
             if elapsedPulses <= 0:
-                self.pulseID[device] = pulseID
+                self.idx[device] = idx
                 return
 
             # Pad the buffer with nans for missed pulses
             elif elapsedPulses > 1:
-                lastIdx = (self.pulseID[device] / scalingFactor)
-                for idx in xrange(lastIdx, (pulseID / scalingFactor)):
-                    self.rawBuffers[device][idx % 2800] = nan
+                lastIdx = self.idx[device]
+                for i in xrange(lastIdx, idx):
+                    self.rawBuffers[device][idx] = nan
 
-            self.pulseID[device] = pulseID
+            # self.pulseID[device] = pulseID
+            self.idx[device] = idx
 
-            # Directly index into the raw buffer using the pulse ID
-            self.rawBuffers[device][(pulseID / scalingFactor) % 2800] = value
+            # Directly index into the raw buffer using the timestamp
+            self.rawBuffers[device][idx] = value
 
             self.counter[device] += elapsedPulses
             self.timeStamps[device] = timestamp
@@ -497,12 +489,10 @@ class RTBSA(QMainWindow):
     def clearPV(self, device):
         pv = self.pvObjects[device]
         if pv:
-            pv.clear_auto_monitor()
-            print "cleared auto monitor " + device
             pv.clear_callbacks()
-            print "cleared callbacks " + device
+            sleep(0.1)
             pv.disconnect()
-            print "disconnected " + device
+            sleep(0.1)
 
     def populateSynchronizedBuffers(self, syncByTime=False):
         numBadShots = self.setValSynced(syncByTime)
@@ -510,10 +500,12 @@ class RTBSA(QMainWindow):
 
         # Make sure the buffer size doesn't exceed the desired number of points
         if self.numpoints < blength:
-            self.synchronizedBuffers["A"] = self.synchronizedBuffers["A"][
-                                            blength - self.numpoints:blength]
-            self.synchronizedBuffers["B"] = self.synchronizedBuffers["B"][
-                                            blength - self.numpoints:blength]
+
+            self.synchronizedBuffers["A"] = \
+                self.synchronizedBuffers["A"][0:self.numpoints]
+
+            self.synchronizedBuffers["B"] = \
+                self.synchronizedBuffers["B"][0:self.numpoints]
 
     # A spin loop that waits until the beam rate is at least 1Hz
     def waitForRate(self):
@@ -826,17 +818,15 @@ class RTBSA(QMainWindow):
 
         # kill switch to stop backgrounded, forgetten GUIs. Somewhere in the
         # ballpark of 15 minutes assuming 120Hz
-        if self.counter["A"] > 110000:
-            self.printStatus("Stopping due to inactivity")
-            self.stop()
+        # if self.counter["A"] > 110000:
+        #     self.stop()
+        #     self.printStatus("Stopping due to inactivity")
 
         QApplication.processEvents()
 
         self.populateSynchronizedBuffers()
         self.filterNans()
         self.filterPeakCurrent()
-
-        # print self.synchronizedBuffers
 
         if self.ui.filterByStdDevs.isChecked():
             self.filterStdDev()
