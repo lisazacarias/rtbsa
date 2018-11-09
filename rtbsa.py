@@ -7,11 +7,9 @@ import time
 from epics import PV
 
 # TODO import these with the namespace
-from multiprocessing.sharedctypes import RawArray
 from numpy import (polyfit, poly1d, polyval, corrcoef, std, mean, concatenate,
                    empty, nan, zeros, isnan, linalg, abs,
-                   fft, argsort, interp, arange, nanmin, nanmax, frombuffer,
-                   copyto)
+                   fft, argsort, interp, arange, nanmin, nanmax)
 
 from PyQt4.QtCore import QTimer, QObject, SIGNAL, Qt
 from PyQt4.QtGui import (QMainWindow, QLabel, QGridLayout, QPalette,
@@ -19,7 +17,6 @@ from PyQt4.QtGui import (QMainWindow, QLabel, QGridLayout, QPalette,
 
 from scipy.stats import nanmean, nanstd
 from subprocess import CalledProcessError, check_output
-from threading import Lock
 
 from logbook import *
 from rtbsa_UI import Ui_RTBSA
@@ -51,7 +48,7 @@ class RTBSA(QMainWindow):
         self.connectGuiFunctions()
 
         # Initial number of points
-        self.numpoints = 2800
+        self.numPoints = 2800
 
         # Initial number of standard deviations
         self.stdDevstoKeep = 3.0
@@ -106,7 +103,6 @@ class RTBSA(QMainWindow):
                                "parab": None, "frequencies": None}
 
         self.counter = {"A": 0, "B": 0}
-        self.idx = {"A": 0, "B": 0}
 
     def getRate(self):
         return self.rateDict[self.ratePV.value]
@@ -213,7 +209,8 @@ class RTBSA(QMainWindow):
         self.plot.showGrid(1, 1)
 
     def loadStyleSheet(self):
-        cssFile = "style.css"
+        # TODO figure out how to do a relative path
+        cssFile = "/home/physics/zacarias/rtbsa/style.css"
         try:
             with open(cssFile, "r") as f:
                 self.setStyleSheet(f.read())
@@ -264,7 +261,7 @@ class RTBSA(QMainWindow):
 
     def correctNumpoints(self, errorMessage, acceptableValue):
         self.correctInput(errorMessage, str(acceptableValue), self.ui.points)
-        self.numpoints = acceptableValue
+        self.numPoints = acceptableValue
 
     def correctStdDevs(self, errorMessage, acceptableValue):
         self.correctInput(errorMessage, str(acceptableValue),
@@ -285,16 +282,16 @@ class RTBSA(QMainWindow):
 
     def points_entered(self):
         try:
-            self.numpoints = int(self.ui.points.text())
+            self.numPoints = int(self.ui.points.text())
         except ValueError:
             self.correctNumpoints('Enter an integer, 1 to 2800', 120)
             return
 
-        if self.numpoints > 2800:
+        if self.numPoints > 2800:
             self.correctNumpoints('Max # points is 2800', 2800)
             return
 
-        if self.numpoints < 1:
+        if self.numPoints < 1:
             self.correctNumpoints('Min # points is 1', 1)
             return
 
@@ -445,7 +442,9 @@ class RTBSA(QMainWindow):
     ############################################################################
     def updateTimeAndBuffer(self, device, pvname, timestamp, value):
 
-        idx = int((timestamp*100) % self.numpoints)
+        def fillWithNan(start, end):
+            for idx in xrange(start, end):
+                self.rawBuffers[device][idx] = nan
 
         if "HSTBR" in pvname:
             self.timeStamps[device] = timestamp
@@ -455,33 +454,47 @@ class RTBSA(QMainWindow):
 
             # Reset the counter every time we reinitialize the plot
             self.counter[device] = 0
-            self.idx[device] = idx
 
         else:
             if not self.timeStamps[device]:
                 return
 
+            if timestamp < self.timeStamps[device]:
+                print "time travel"
+
             rate = self.getRate()
             if rate < 1:
                 return
 
-            elapsedPulses = idx - self.idx[device]
+            scalingFactor = 1.0 / rate
+            elapsedPulses = round((timestamp - self.timeStamps[device])
+                                  / scalingFactor)
+
+            currIdx = int((timestamp / scalingFactor) % self.numPoints)
 
             if elapsedPulses <= 0:
-                self.idx[device] = idx
+                print "Got " + str(elapsedPulses) + " elapsed pulses - ignoring"
                 return
 
             # Pad the buffer with nans for missed pulses
             elif elapsedPulses > 1:
-                lastIdx = self.idx[device]
-                for i in xrange(lastIdx, idx):
-                    self.rawBuffers[device][idx] = nan
+                print str(elapsedPulses) + " pulses missed for device " + device
 
-            # self.pulseID[device] = pulseID
-            self.idx[device] = idx
+                lastIdx = int((self.timeStamps[device] / scalingFactor)
+                              % self.numPoints)
+
+                # Take care of wrap around
+                start = (lastIdx + 1) % self.numPoints
+                if currIdx < lastIdx:
+                    print "Index wrapped around"
+                    fillWithNan(start, self.numPoints)
+                    fillWithNan(0, currIdx)
+
+                else:
+                    fillWithNan(start, currIdx)
 
             # Directly index into the raw buffer using the timestamp
-            self.rawBuffers[device][idx] = value
+            self.rawBuffers[device][currIdx] = value
 
             self.counter[device] += elapsedPulses
             self.timeStamps[device] = timestamp
@@ -499,13 +512,13 @@ class RTBSA(QMainWindow):
         blength = 2800 - numBadShots
 
         # Make sure the buffer size doesn't exceed the desired number of points
-        if self.numpoints < blength:
+        if self.numPoints < blength:
 
             self.synchronizedBuffers["A"] = \
-                self.synchronizedBuffers["A"][0:self.numpoints]
+                self.synchronizedBuffers["A"][0:self.numPoints]
 
             self.synchronizedBuffers["B"] = \
-                self.synchronizedBuffers["B"][0:self.numpoints]
+                self.synchronizedBuffers["B"][0:self.numPoints]
 
     # A spin loop that waits until the beam rate is at least 1Hz
     def waitForRate(self):
@@ -646,12 +659,12 @@ class RTBSA(QMainWindow):
             self.ui.draw_button.setEnabled(True)
             return
 
-        data = newData[-self.numpoints:]
+        data = newData[-self.numPoints:]
 
         self.plotAttributes["curve"] = pg.PlotCurveItem(data, pen=1)
         self.plot.addItem(self.plotAttributes["curve"])
 
-        self.plotAttributes["xData"] = arange(self.numpoints)
+        self.plotAttributes["xData"] = arange(self.numPoints)
 
         self.plotFit(self.plotAttributes["xData"], data, self.devices["A"])
 
@@ -684,24 +697,24 @@ class RTBSA(QMainWindow):
 
             if self.ui.std_cb.isChecked():
                 self.setPosAndText(self.text["std"], std(yData),
-                                   self.numpoints / 4,
+                                   self.numPoints / 4,
                                    min(yData), 'STD: ')
 
             if self.ui.corr_cb.isChecked():
                 self.text["corr"].setText('')
 
             if self.ui.line_cb.isChecked():
-                self.text["slope"].setPos(self.numpoints / 2, min(yData))
+                self.text["slope"].setPos(self.numPoints / 2, min(yData))
                 self.getLinearFit(xData, yData, True)
 
             elif self.ui.parab_cb.isChecked():
-                self.text["slope"].setPos(self.numpoints / 2, min(yData))
+                self.text["slope"].setPos(self.numPoints / 2, min(yData))
                 self.getPolynomialFit(xData, yData, True)
 
         self.timer.singleShot(self.updateTime, self.updateTimePlotA)
 
     def filterTimePlotBuffer(self):
-        choppedBuffer = self.rawBuffers["A"][-self.numpoints:]
+        choppedBuffer = self.rawBuffers["A"][-self.numPoints:]
 
         xData, yData = self.filterBuffers(choppedBuffer,
                                           lambda x: ~isnan(x),
@@ -818,9 +831,9 @@ class RTBSA(QMainWindow):
 
         # kill switch to stop backgrounded, forgetten GUIs. Somewhere in the
         # ballpark of 15 minutes assuming 120Hz
-        # if self.counter["A"] > 110000:
-        #     self.stop()
-        #     self.printStatus("Stopping due to inactivity")
+        if self.counter["A"] > 110000:
+            self.stop()
+            self.printStatus("Stopping due to inactivity")
 
         QApplication.processEvents()
 
@@ -948,7 +961,7 @@ class RTBSA(QMainWindow):
         if not newdata.size:
             return None
 
-        newdata = newdata[-self.numpoints:]
+        newdata = newdata[-self.numPoints:]
 
         nans, x = isnan(newdata), lambda z: z.nonzero()[0]
         # interpolate nans
@@ -956,7 +969,7 @@ class RTBSA(QMainWindow):
         # remove DC component
         newdata = newdata - mean(newdata)
 
-        newdata = concatenate([newdata, zeros(self.numpoints * 2)])
+        newdata = concatenate([newdata, zeros(self.numPoints * 2)])
 
         ps = abs(fft.fft(newdata)) / newdata.size
 
@@ -1203,7 +1216,7 @@ class RTBSA(QMainWindow):
 
     def logbook(self):
         logbook('Python Real-Time BSA', 'BSA Data',
-                str(self.numpoints) + ' points', self.plot.plotItem)
+                str(self.numPoints) + ' points', self.plot.plotItem)
         self.statusBar().showMessage('Sent to LCLS Physics Logbook!', 10000)
 
     def MCCLog(self):
