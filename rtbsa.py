@@ -99,10 +99,12 @@ class RTBSA(QMainWindow):
         self.text = {"avg": None, "std": None, "slope": None, "corr": None}
 
         # All things plot related!
-        self.plotAttributes = {"curve": None, "xData": empty(2800), "fit": None,
-                               "parab": None, "frequencies": None}
+        self.plotAttributes = {"curve": None, "fit": None, "parab": None,
+                               "frequencies": None}
 
         self.counter = {"A": 0, "B": 0}
+
+        self.currIdx = {"A": 0, "B": 0}
 
     def getRate(self):
         return self.rateDict[self.ratePV.value]
@@ -271,12 +273,9 @@ class RTBSA(QMainWindow):
     def stdDevEntered(self):
         try:
             self.stdDevstoKeep = float(self.ui.numStdDevs.text())
+            if self.stdDevstoKeep <= 0:
+                raise ValueError
         except ValueError:
-            self.correctStdDevs('Enter a float > 0', 3.0)
-            return
-
-        # TODO Is there a way to combine an except and an if?
-        if self.stdDevstoKeep <= 0:
             self.correctStdDevs('Enter a float > 0', 3.0)
             return
 
@@ -459,9 +458,6 @@ class RTBSA(QMainWindow):
             if not self.timeStamps[device]:
                 return
 
-            if timestamp < self.timeStamps[device]:
-                print "time travel"
-
             rate = self.getRate()
             if rate < 1:
                 return
@@ -484,20 +480,20 @@ class RTBSA(QMainWindow):
                               % self.numPoints)
 
                 # Take care of wrap around
-                start = (lastIdx + 1) % self.numPoints
                 if currIdx < lastIdx:
                     print "Index wrapped around"
-                    fillWithNan(start, self.numPoints)
+                    fillWithNan(lastIdx + 1, self.numPoints)
                     fillWithNan(0, currIdx)
 
                 else:
-                    fillWithNan(start, currIdx)
+                    fillWithNan(lastIdx + 1, currIdx)
 
             # Directly index into the raw buffer using the timestamp
             self.rawBuffers[device][currIdx] = value
 
             self.counter[device] += elapsedPulses
             self.timeStamps[device] = timestamp
+            self.currIdx[device] = currIdx
 
     def clearPV(self, device):
         pv = self.pvObjects[device]
@@ -515,10 +511,10 @@ class RTBSA(QMainWindow):
         if self.numPoints < blength:
 
             self.synchronizedBuffers["A"] = \
-                self.synchronizedBuffers["A"][0:self.numPoints]
+                self.synchronizedBuffers["A"][:self.numPoints]
 
             self.synchronizedBuffers["B"] = \
-                self.synchronizedBuffers["B"][0:self.numPoints]
+                self.synchronizedBuffers["B"][:self.numPoints]
 
     # A spin loop that waits until the beam rate is at least 1Hz
     def waitForRate(self):
@@ -580,7 +576,7 @@ class RTBSA(QMainWindow):
         if syncByTime:
             numBadShots = int(round((self.timeStamps["B"]
                                      - self.timeStamps["A"])
-                                    * self.waitForRate()))
+                                    * self.getRate()))
 
             startA, endA = self.getIndices(numBadShots, 1)
             startB, endB = self.getIndices(numBadShots, -1)
@@ -659,14 +655,12 @@ class RTBSA(QMainWindow):
             self.ui.draw_button.setEnabled(True)
             return
 
-        data = newData[-self.numPoints:]
+        data = newData[:self.numPoints]
 
         self.plotAttributes["curve"] = pg.PlotCurveItem(data, pen=1)
         self.plot.addItem(self.plotAttributes["curve"])
 
-        self.plotAttributes["xData"] = arange(self.numPoints)
-
-        self.plotFit(self.plotAttributes["xData"], data, self.devices["A"])
+        self.plotFit(arange(self.numPoints), data, self.devices["A"])
 
     ############################################################################
     # This is the main plotting function for "Plot A vs Time" that gets called
@@ -675,9 +669,7 @@ class RTBSA(QMainWindow):
     ############################################################################
     def updateTimePlotA(self):
 
-        QApplication.processEvents()
-
-        if self.abort:
+        if not self.checkPlotStatus():
             return
 
         xData, yData = self.filterTimePlotBuffer()
@@ -713,13 +705,34 @@ class RTBSA(QMainWindow):
 
         self.timer.singleShot(self.updateTime, self.updateTimePlotA)
 
-    def filterTimePlotBuffer(self):
-        choppedBuffer = self.rawBuffers["A"][-self.numPoints:]
+    def checkPlotStatus(self):
+        QApplication.processEvents()
 
-        xData, yData = self.filterBuffers(choppedBuffer,
-                                          lambda x: ~isnan(x),
-                                          self.plotAttributes["xData"],
-                                          choppedBuffer)
+        if self.abort:
+            return False
+
+        self.waitForRate()
+
+        # kill switch to stop backgrounded, forgetten GUIs. Somewhere in the
+        # ballpark of 15 minutes assuming 120Hz
+        if self.counter["A"] > 110000:
+            self.stop()
+            self.printStatus("Stopping due to inactivity")
+
+        return True
+
+    def filterTimePlotBuffer(self):
+        currIdx = self.currIdx["A"]
+        choppedBuffer = self.rawBuffers["A"][:self.numPoints]
+
+        # All this nonsense to make it scroll :P Thanks to Ben for the
+        # inspiration!
+        if currIdx > 0:
+            choppedBuffer = concatenate([choppedBuffer[currIdx:],
+                                        choppedBuffer[:currIdx]])
+
+        xData, yData = self.filterBuffers(choppedBuffer, lambda x: ~isnan(x),
+                                          arange(self.numPoints), choppedBuffer)
 
         if self.devices["A"] == "BLEN:LI24:886:BIMAX":
             xData, yData = self.filterBuffers(yData,
@@ -824,16 +837,8 @@ class RTBSA(QMainWindow):
     # every self.updateTime milliseconds
     ############################################################################
     def updatePlotAB(self):
-        if self.abort:
+        if not self.checkPlotStatus():
             return
-
-        self.waitForRate()
-
-        # kill switch to stop backgrounded, forgetten GUIs. Somewhere in the
-        # ballpark of 15 minutes assuming 120Hz
-        if self.counter["A"] > 110000:
-            self.stop()
-            self.printStatus("Stopping due to inactivity")
 
         QApplication.processEvents()
 
@@ -961,7 +966,7 @@ class RTBSA(QMainWindow):
         if not newdata.size:
             return None
 
-        newdata = newdata[-self.numPoints:]
+        newdata = newdata[:self.numPoints]
 
         nans, x = isnan(newdata), lambda z: z.nonzero()[0]
         # interpolate nans
@@ -973,7 +978,8 @@ class RTBSA(QMainWindow):
 
         ps = abs(fft.fft(newdata)) / newdata.size
 
-        frequencies = fft.fftfreq(newdata.size, 1.0 / self.waitForRate())
+        self.waitForRate()
+        frequencies = fft.fftfreq(newdata.size, 1.0 / self.getRate())
         keep = (frequencies >= 0)
         ps = ps[keep]
         frequencies = frequencies[keep]
@@ -1045,9 +1051,7 @@ class RTBSA(QMainWindow):
     # every self.updateTime seconds
     ############################################################################
     def updatePlotFFT(self):
-        QApplication.processEvents()
-
-        if self.abort:
+        if not self.checkPlotStatus():
             return
 
         ps = self.genPlotFFT(self.rawBuffers["A"], True)
