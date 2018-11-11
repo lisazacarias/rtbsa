@@ -862,58 +862,57 @@ class RTBSA(QMainWindow):
     def updateLabelsAndFit(self, bufferA, bufferB):
         self.plotAttributes["curve"].setData(bufferA, bufferB)
 
-        if self.ui.autoscale_cb.isChecked():
-            self.setPlotRanges(bufferA, bufferB)
-
-        minBufferA = nanmin(bufferA)
-        minBufferB = nanmin(bufferB)
-        maxBufferA = nanmax(bufferA)
-        maxBufferB = nanmax(bufferB)
-
-        if self.ui.avg_cb.isChecked():
-            rtbsaUtils.setPosAndText(self.text["avg"], nanmean(bufferB),
-                                     minBufferA,
-                                     minBufferB, 'AVG: ')
-
-        if self.ui.std_cb.isChecked():
-            xPos = (minBufferA + (minBufferA + maxBufferA) / 2) / 2
-
-            rtbsaUtils.setPosAndText(self.text["std"], nanstd(bufferB), xPos,
-                                     minBufferB,
-                                     'STD: ')
-
-        if self.ui.corr_cb.isChecked():
-            correlation = corrcoef(bufferA, bufferB)
-            rtbsaUtils.setPosAndText(self.text["corr"], correlation.item(1),
-                                     minBufferA, maxBufferB,
-                                     "Corr. Coefficient: ")
-
-        if self.ui.line_cb.isChecked():
-            self.text["slope"].setPos((minBufferA + maxBufferA) / 2,
-                                      minBufferB)
-            self.getLinearFit(bufferA, bufferB, True)
-
-        elif self.ui.parab_cb.isChecked():
-            self.text["slope"].setPos((minBufferA + maxBufferA) / 2,
-                                      minBufferB)
-            self.getPolynomialFit(bufferA, bufferB, True)
-
-    def setPlotRanges(self, bufferA, bufferB):
         try:
-            mx = nanmax(bufferB)
-            mn = nanmin(bufferB)
+            if self.ui.autoscale_cb.isChecked():
+                self.setPlotRanges(bufferA, bufferB)
 
-            if mn != mx:
-                self.plot.setYRange(mn, mx)
+            minBufferA = nanmin(bufferA)
+            minBufferB = nanmin(bufferB)
+            maxBufferA = nanmax(bufferA)
+            maxBufferB = nanmax(bufferB)
 
-            mx = nanmax(bufferA)
-            mn = nanmin(bufferA)
+            if self.ui.avg_cb.isChecked():
+                rtbsaUtils.setPosAndText(self.text["avg"], nanmean(bufferB),
+                                         minBufferA,
+                                         minBufferB, 'AVG: ')
 
-            if mn != mx:
-                self.plot.setXRange(mn, mx)
-                
+            if self.ui.std_cb.isChecked():
+                xPos = (minBufferA + (minBufferA + maxBufferA) / 2) / 2
+
+                rtbsaUtils.setPosAndText(self.text["std"], nanstd(bufferB),
+                                         xPos, minBufferB, 'STD: ')
+
+            if self.ui.corr_cb.isChecked():
+                correlation = corrcoef(bufferA, bufferB)
+                rtbsaUtils.setPosAndText(self.text["corr"], correlation.item(1),
+                                         minBufferA, maxBufferB,
+                                         "Corr. Coefficient: ")
+
+            if self.ui.line_cb.isChecked():
+                self.text["slope"].setPos((minBufferA + maxBufferA) / 2,
+                                          minBufferB)
+                self.getLinearFit(bufferA, bufferB, True)
+
+            elif self.ui.parab_cb.isChecked():
+                self.text["slope"].setPos((minBufferA + maxBufferA) / 2,
+                                          minBufferB)
+                self.getPolynomialFit(bufferA, bufferB, True)
+
         except ValueError:
             print "Error updating plot range"
+
+    def setPlotRanges(self, bufferA, bufferB):
+        mx = nanmax(bufferB)
+        mn = nanmin(bufferB)
+
+        if mn != mx:
+            self.plot.setYRange(mn, mx)
+
+        mx = nanmax(bufferA)
+        mn = nanmin(bufferA)
+
+        if mn != mx:
+            self.plot.setXRange(mn, mx)
 
     def InitializeFFTPlot(self):
         self.genPlotFFT(self.initializeData(), False)
