@@ -1,3 +1,162 @@
+from numpy import nan
+import pyqtgraph as pg
+from subprocess import Popen
+from time import sleep
+import os
+from datetime import datetime
+from xml.etree import ElementTree
+from re import sub
+from shutil import copy
+
+
+IPK_LIMIT = 12000
+
+
+# IOC:IN20:EV01:RG01_ACTRATE returns one of 7 states, 0 through 6, where
+# 0 is NULL (unclear what that means, but doesn't sound good), 1 is 0Hz,
+# 2 is 1Hz, 3 is 10Hz, 4 is 30Hz, 5 is 60Hz, and 6 is 120Hz
+rateDict = {0: 0.0, 1: 0.0, 2: 1.0, 3: 10.0, 4: 30.0, 5: 60.0, 6: 120.0}
+
+
+def setPosAndText(attribute, value, posValX, posValY, textVal):
+    value = "{:.3}".format(value)
+    attribute.setPos(posValX, posValY)
+    attribute.setText(textVal + str(value))
+
+
+def filterBuffers(bufferToFilter, filterFunc, xData, yData):
+    mask = filterFunc(bufferToFilter)
+    return xData[mask], yData[mask]
+
+
+def add_actions(target, actions):
+    for action in actions:
+        if action is None:
+            target.addSeparator()
+        else:
+            target.addAction(action)
+
+
+def padWithNans(dataBuffer, start, end):
+    for idx in xrange(start, end):
+        dataBuffer[idx] = nan
+
+
+############################################################################
+# A function that decides which indices to keep for each buffer. Using k to
+# denote the absolute value of the difference between the buffers, we get:
+#
+# Case 1: numBadShots is negative (buffer A is ahead and has had more
+#         points appended)
+#
+#       Case A: The multiplier for A's indices is 1, so:
+#
+#               max(0, mult * numBadShots) -> max(0, -k) -> 0
+#
+#               min(2800, 2800 + (mult * numBadShots))
+#               -> min(2800, 2800 - k) -> 2800-k
+#
+#               And we get [0, 2800-k] for buffer A
+#
+#       Case B: The multiplier for B's indices is -1, so:
+#
+#               max(0, mult * numBadShots) -> max(0, k) -> k
+#
+#               min(2800, 2800 + (mult * numBadShots))
+#               -> min(2800, 2800 + k) -> 2800
+#
+#               And we get [k, 2800] for buffer B
+#
+# Case 2: Using similar logic, the inverse is true when numBadShots is
+#         positive
+#
+# Side note, the @ is an annotation symbol that tells the interpreter
+# something about the thing it's annotating. In this case, it's telling us
+# that getIndices is a static method, meaning that it doesn't do anything
+# with class variables (i.e. there's no need for a "self" parameter)
+############################################################################
+def getIndices(numBadShots, mult):
+
+    return (max(0, mult * numBadShots),
+            min(2800, 2800 + (mult * numBadShots)))
+
+
+# Shamelessly stolen from Shawn (thanks buddy). A lot of this is probably
+# unnecessary for my purposes but I'm too lazy to clean it up
+def logbook(userText, titleText, textText, plotItem):
+    curr_time = datetime.now()
+    timeString = curr_time.strftime("%Y-%m-%dT%H:%M:%S")
+    log_entry = ElementTree.Element(None)
+    severity = ElementTree.SubElement(log_entry, 'severity')
+    location = ElementTree.SubElement(log_entry, 'location')
+    keywords = ElementTree.SubElement(log_entry, 'keywords')
+    time = ElementTree.SubElement(log_entry, 'time')
+    isodate = ElementTree.SubElement(log_entry, 'isodate')
+    log_user = ElementTree.SubElement(log_entry, 'author')
+    category = ElementTree.SubElement(log_entry, 'category')
+    title = ElementTree.SubElement(log_entry, 'title')
+    metainfo = ElementTree.SubElement(log_entry, 'metainfo')
+    imageFile = ElementTree.SubElement(log_entry, 'link')
+    imageFile.text = timeString + '-00.ps'
+    thumbnail = ElementTree.SubElement(log_entry, 'file')
+    thumbnail.text = timeString + "-00.png"
+    text = ElementTree.SubElement(log_entry, 'text')
+    log_entry.attrib['type'] = "LOGENTRY"
+    category.text = "USERLOG"
+    location.text = "not set"
+    severity.text = "NONE"
+    keywords.text = "none"
+    time.text = curr_time.strftime("%H:%M:%S")
+    isodate.text = curr_time.strftime("%Y-%m-%d")
+    metainfo.text = timeString + "-00.xml"
+    fileName = "/tmp/" + metainfo.text
+    fileName = fileName.rstrip(".xml")
+    log_user.text = userText
+    title.text = titleText
+    text.text = textText
+
+    # If field is truly empty, ElementTree leaves off tag entirely which
+    # causes logbook parser to fail
+    if text.text == "": text.text = " "
+
+    xmlFile = open(fileName + '.xml', "w")
+    rawString = ElementTree.tostring(log_entry, 'utf-8')
+
+    # Adds newline after each closing tag
+    parsedString = sub(r'(?=<[^/].*>)', '\n', rawString)
+
+    xmlString = parsedString[1:]
+    xmlFile.write(xmlString)
+
+    # Close with newline so cron job parses correctly
+    xmlFile.write("\n")
+
+    xmlFile.close()
+    exporter = pg.exporters.ImageExporter(plotItem)
+    # exporter.parameters()['width'] = 550
+    exporter.export(fileName + '.png')
+    # PyQtGraph doesn't export PS files, so convert with linux
+    Popen('convert ' + fileName + '.png ' + fileName + '.ps', shell=True)
+
+    sleep(0.3)
+    Popen('convert ' + fileName + '.png -resize 500x500 ' + fileName
+          + '.png', shell=True)
+    sleep(0.35)
+    path = "/u1/lcls/physics/logbook/data/"
+    copy(fileName + '.ps', path)
+    copy(fileName + '.png', path)
+    copy(fileName + '.xml', path)
+
+
+def MCCLog(tmpPNG, tmpPS, plotItem):
+    exporter = pg.exporters.ImageExporter(plotItem)
+    exporter.export(tmpPNG)
+    Popen("convert " + tmpPNG + " " + tmpPS, shell=True)
+    sleep(0.1)
+    printFile = "lpr -P" + 'elog_mcc' + " " + tmpPS
+    os.system(printFile)
+
+
 commonlist = ['GDET:FEE1:241:ENRC', 'GDET:FEE1:242:ENRC',
               'GDET:FEE1:361:ENRC', 'GDET:FEE1:362:ENRC',
               'KLYS:LI20:K6:VOLT', 'ACCL:IN20:300:L0A_P',

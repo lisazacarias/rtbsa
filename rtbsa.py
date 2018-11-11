@@ -1,6 +1,6 @@
 #!/usr/local/lcls/package/python/current/bin/python
 # Written by Zimmer, edited by Ahmed, refactored by Lisa
-
+import os
 import sys
 import time
 
@@ -14,16 +14,13 @@ from numpy import (polyfit, poly1d, polyval, corrcoef, std, mean, concatenate,
 from PyQt4.QtCore import QTimer, QObject, SIGNAL, Qt
 from PyQt4.QtGui import (QMainWindow, QLabel, QGridLayout, QPalette,
                          QApplication, QAction, QFileDialog, QIcon, QMessageBox)
+import pyqtgraph as pg
 
 from scipy.stats import nanmean, nanstd
 from subprocess import CalledProcessError, check_output
 
-from logbook import *
 from rtbsa_UI import Ui_RTBSA
-import Constants
-
-
-PEAK_CURRENT_LIMIT = 12000
+import rtbsaUtils
 
 
 # noinspection PyArgumentList,PyCompatibility
@@ -67,12 +64,6 @@ class RTBSA(QMainWindow):
 
         self.ratePV = PV('IOC:IN20:EV01:RG01_ACTRATE')
 
-        # IOC:IN20:EV01:RG01_ACTRATE returns one of 7 states, 0 through 6, where
-        # 0 is NULL (unclear what that means, but doesn't sound good), 1 is 0Hz,
-        # 2 is 1Hz, 3 is 10Hz, 4 is 30Hz, 5 is 60Hz, and 6 is 120Hz
-        self.rateDict = {0: 0.0, 1: 0.0, 2: 1.0, 3: 10.0, 4: 30.0, 5: 60.0,
-                         6: 120.0}
-
         self.menuBar().setStyleSheet('QWidget{background-color:grey;color:purple}')
         self.create_menu()
         self.create_status_bar()
@@ -102,12 +93,14 @@ class RTBSA(QMainWindow):
         self.plotAttributes = {"curve": None, "fit": None, "parab": None,
                                "frequencies": None}
 
+        # Used for the kill swtich
         self.counter = {"A": 0, "B": 0}
 
+        # Used to implement scrolling for time plots
         self.currIdx = {"A": 0, "B": 0}
 
     def getRate(self):
-        return self.rateDict[self.ratePV.value]
+        return rtbsaUtils.rateDict[self.ratePV.value]
 
     def disableInputs(self):
         self.ui.fitedit.setDisabled(True)
@@ -130,7 +123,7 @@ class RTBSA(QMainWindow):
         except CalledProcessError:
             print("Unable to pull most recent PV list")
             # bsaPVs is pulled from the Constants file
-            self.bsapvs.extend(Constants.bsaPVs)
+            self.bsapvs.extend(rtbsaUtils.bsaPVs)
 
         for pv in self.bsapvs:
             self.ui.listWidget.addItem(pv)
@@ -148,16 +141,16 @@ class RTBSA(QMainWindow):
         self.ui.listWidget_2.itemClicked.connect(self.setEnterB)
 
         # Dropdown menu for device A (add common BSA PV's)
-        self.ui.common1.addItems(Constants.commonlist)
+        self.ui.common1.addItems(rtbsaUtils.commonlist)
 
         # Make bunch length default selection
-        index = Constants.commonlist.index("BLEN:LI24:886:BIMAX")
+        index = rtbsaUtils.commonlist.index("BLEN:LI24:886:BIMAX")
         self.ui.common1.setCurrentIndex(index)
 
         self.ui.common1.activated.connect(self.inputActivated)
 
         # Dropdown menu for device B
-        self.ui.common2.addItems(Constants.commonlist)
+        self.ui.common2.addItems(rtbsaUtils.commonlist)
         self.ui.common2.activated.connect(self.inputActivated)
 
         # All the checkboxes in the Settings section
@@ -211,8 +204,8 @@ class RTBSA(QMainWindow):
         self.plot.showGrid(1, 1)
 
     def loadStyleSheet(self):
-        # TODO figure out how to do a relative path
-        cssFile = "/home/physics/zacarias/rtbsa/style.css"
+        currDir = os.path.abspath(os.path.dirname(__file__))
+        cssFile = os.path.join(currDir, "style.css")
         try:
             with open(cssFile, "r") as f:
                 self.setStyleSheet(f.read())
@@ -245,6 +238,7 @@ class RTBSA(QMainWindow):
         enter.textChanged.disconnect()
         enter.setText(selection.text())
         QObject.connect(enter, SIGNAL("textChanged(const QString&)"), search)
+
         if not self.abort and enter_rb.isChecked():
             self.stop()
             self.timer.singleShot(250, self.initializePlot)
@@ -357,6 +351,7 @@ class RTBSA(QMainWindow):
     def printStatus(self, message, printToXterm=True):
         if printToXterm:
             print message
+
         self.statusBar().showMessage(message)
 
     def updateValsFromInput(self):
@@ -369,8 +364,8 @@ class RTBSA(QMainWindow):
                                     self.ui.enter2_rb, self.ui.enter2, "B"):
             return False
 
-        self.printStatus('Initializing/Syncing (be patient may take 5 '
-                         'seconds)...')
+        self.printStatus("Initializing/Synchronizing " + self.devices["A"]
+                         + " vs. " + self.devices["B"] + " buffers...")
 
         # Initial population of our buffers using the HSTBR PV's in our
         # callback functions
@@ -380,8 +375,7 @@ class RTBSA(QMainWindow):
                and not self.abort):
             QApplication.processEvents()
 
-        self.populateSynchronizedBuffers(True)
-        print "populated synchronized buffers"
+        self.adjustSynchronizedBuffers(True)
 
         # Switch to BR PVs to avoid pulling an entire history buffer on every
         # update.
@@ -414,8 +408,8 @@ class RTBSA(QMainWindow):
         if resetRawBuffer:
             nanArray = empty(2800 - self.synchronizedBuffers[device].size)
             nanArray[:] = nan
-            self.rawBuffers[device] = concatenate([self.synchronizedBuffers[device],
-                                                   nanArray])
+            self.rawBuffers[device] = \
+                concatenate([self.synchronizedBuffers[device], nanArray])
 
         self.pvObjects[device].add_callback(callback)
 
@@ -441,9 +435,8 @@ class RTBSA(QMainWindow):
     ############################################################################
     def updateTimeAndBuffer(self, device, pvname, timestamp, value):
 
-        def fillWithNan(start, end):
-            for idx in xrange(start, end):
-                self.rawBuffers[device][idx] = nan
+        def padRawBufferWithNans(start, end):
+            rtbsaUtils.padWithNans(self.rawBuffers[device], start, end)
 
         if "HSTBR" in pvname:
             self.timeStamps[device] = timestamp
@@ -469,24 +462,22 @@ class RTBSA(QMainWindow):
             currIdx = int((timestamp / scalingFactor) % self.numPoints)
 
             if elapsedPulses <= 0:
-                print "Got " + str(elapsedPulses) + " elapsed pulses - ignoring"
                 return
 
             # Pad the buffer with nans for missed pulses
             elif elapsedPulses > 1:
-                print str(elapsedPulses) + " pulses missed for device " + device
 
+                # noinspection PyTypeChecker
                 lastIdx = int((self.timeStamps[device] / scalingFactor)
                               % self.numPoints)
 
                 # Take care of wrap around
                 if currIdx < lastIdx:
-                    print "Index wrapped around"
-                    fillWithNan(lastIdx + 1, self.numPoints)
-                    fillWithNan(0, currIdx)
+                    padRawBufferWithNans(lastIdx + 1, self.numPoints)
+                    padRawBufferWithNans(0, currIdx)
 
                 else:
-                    fillWithNan(lastIdx + 1, currIdx)
+                    padRawBufferWithNans(lastIdx + 1, currIdx)
 
             # Directly index into the raw buffer using the timestamp
             self.rawBuffers[device][currIdx] = value
@@ -499,17 +490,14 @@ class RTBSA(QMainWindow):
         pv = self.pvObjects[device]
         if pv:
             pv.clear_callbacks()
-            sleep(0.1)
             pv.disconnect()
-            sleep(0.1)
 
-    def populateSynchronizedBuffers(self, syncByTime=False):
-        numBadShots = self.setValSynced(syncByTime)
+    def adjustSynchronizedBuffers(self, syncByTime=False):
+        numBadShots = self.populateSynchronizedBuffers(syncByTime)
         blength = 2800 - numBadShots
 
         # Make sure the buffer size doesn't exceed the desired number of points
         if self.numPoints < blength:
-
             self.synchronizedBuffers["A"] = \
                 self.synchronizedBuffers["A"][:self.numPoints]
 
@@ -527,7 +515,7 @@ class RTBSA(QMainWindow):
             # noinspection PyArgumentList
             QApplication.processEvents()
 
-            if time.time() - start_time > 1:
+            if time.time() - start_time > 0.5:
                 gotStuckAndNeedToUpdateMessage = True
                 self.printStatus("Waiting for beam rate to be at least 1Hz...",
                                  False)
@@ -535,7 +523,7 @@ class RTBSA(QMainWindow):
         if gotStuckAndNeedToUpdateMessage:
             self.printStatus("Running", False)
 
-        return self.rateDict[self.ratePV.value]
+        return rtbsaUtils.rateDict[self.ratePV.value]
 
     ############################################################################
     # Time 1 is when Device A started acquiring data, and Time 2 is when Device
@@ -572,62 +560,40 @@ class RTBSA(QMainWindow):
     # suffix). From then on, we're indexing into the raw buffers using the
     # pulse ID modulo 2800, so they're inherently synchronized
     ############################################################################
-    def setValSynced(self, syncByTime):
+    def populateSynchronizedBuffers(self, syncByTime):
+        def padSyncBufferWithNans(device, startIdx, endIdx):
+            rtbsaUtils.padWithNans(self.synchronizedBuffers[device],
+                                   startIdx - 2,
+                                   endIdx + 1)
+
         if syncByTime:
-            numBadShots = int(round((self.timeStamps["B"]
-                                     - self.timeStamps["A"])
+            numBadShots = int(round((self.timeStamps["B"] - self.timeStamps["A"])
                                     * self.getRate()))
 
-            startA, endA = self.getIndices(numBadShots, 1)
-            startB, endB = self.getIndices(numBadShots, -1)
+            startA, endA = rtbsaUtils.getIndices(numBadShots, 1)
+            startB, endB = rtbsaUtils.getIndices(numBadShots, -1)
 
             self.synchronizedBuffers["A"] = self.rawBuffers["A"][startA:endA]
             self.synchronizedBuffers["B"] = self.rawBuffers["B"][startB:endB]
 
             return abs(numBadShots)
         else:
+
             self.synchronizedBuffers["A"] = self.rawBuffers["A"]
             self.synchronizedBuffers["B"] = self.rawBuffers["B"]
+
+            currIdxA = self.currIdx["A"]
+            currIdxB = self.currIdx["B"]
+
+            diff = currIdxA - currIdxB
+
+            if diff > 0:
+                padSyncBufferWithNans("A", currIdxB, currIdxA)
+
+            elif diff < 0:
+                padSyncBufferWithNans("B", currIdxA, currIdxB)
+
             return 0
-
-    ############################################################################
-    # A function that decides which indices to keep for each buffer. Using k to
-    # denote the absolute value of the difference between the buffers, we get:
-    #
-    # Case 1: numBadShots is negative (buffer A is ahead and has had more
-    #         points appended)
-    #
-    #       Case A: The multiplier for A's indices is 1, so:
-    #
-    #               max(0, mult * numBadShots) -> max(0, -k) -> 0
-    #
-    #               min(2800, 2800 + (mult * numBadShots))
-    #               -> min(2800, 2800 - k) -> 2800-k
-    #
-    #               And we get [0, 2800-k] for buffer A
-    #
-    #       Case B: The multiplier for B's indices is -1, so:
-    #
-    #               max(0, mult * numBadShots) -> max(0, k) -> k
-    #
-    #               min(2800, 2800 + (mult * numBadShots))
-    #               -> min(2800, 2800 + k) -> 2800
-    #
-    #               And we get [k, 2800] for buffer B
-    #
-    # Case 2: Using similar logic, the inverse is true when numBadShots is
-    #         positive
-    #
-    # Side note, the @ is an annotation symbol that tells the interpreter
-    # something about the thing it's annotating. In this case, it's telling us
-    # that getIndices is a static method, meaning that it doesn't do anything
-    # with class variables (i.e. there's no need for a "self" parameter)
-    ############################################################################
-    @staticmethod
-    def getIndices(numBadShots, mult):
-
-        return (max(0, mult * numBadShots),
-                min(2800, 2800 + (mult * numBadShots)))
 
     def genPlotAndSetTimer(self, genPlot, updateMethod):
         if self.abort:
@@ -684,13 +650,13 @@ class RTBSA(QMainWindow):
                     self.plot.setXRange(0, len(yData))
 
             if self.ui.avg_cb.isChecked():
-                self.setPosAndText(self.text["avg"], mean(yData), 0, min(yData),
-                                   'AVG: ')
+                rtbsaUtils.setPosAndText(self.text["avg"], mean(yData), 0,
+                                         min(yData), 'AVG: ')
 
             if self.ui.std_cb.isChecked():
-                self.setPosAndText(self.text["std"], std(yData),
-                                   self.numPoints / 4,
-                                   min(yData), 'STD: ')
+                rtbsaUtils.setPosAndText(self.text["std"], std(yData),
+                                         self.numPoints / 4, min(yData),
+                                         'STD: ')
 
             if self.ui.corr_cb.isChecked():
                 self.text["corr"].setText('')
@@ -714,8 +680,8 @@ class RTBSA(QMainWindow):
         self.waitForRate()
 
         # kill switch to stop backgrounded, forgetten GUIs. Somewhere in the
-        # ballpark of 15 minutes assuming 120Hz
-        if self.counter["A"] > 110000:
+        # ballpark of 20 minutes assuming 120Hz
+        if self.counter["A"] > 150000:
             self.stop()
             self.printStatus("Stopping due to inactivity")
 
@@ -729,45 +695,38 @@ class RTBSA(QMainWindow):
         # inspiration!
         if currIdx > 0:
             choppedBuffer = concatenate([choppedBuffer[currIdx:],
-                                        choppedBuffer[:currIdx]])
+                                         choppedBuffer[:currIdx]])
 
-        xData, yData = self.filterBuffers(choppedBuffer, lambda x: ~isnan(x),
-                                          arange(self.numPoints), choppedBuffer)
+        xData, yData = rtbsaUtils.filterBuffers(choppedBuffer,
+                                                lambda x: ~isnan(x),
+                                                arange(self.numPoints),
+                                                choppedBuffer)
 
         if self.devices["A"] == "BLEN:LI24:886:BIMAX":
-            xData, yData = self.filterBuffers(yData,
-                                              lambda x: x < PEAK_CURRENT_LIMIT,
-                                              xData, yData)
+            xData, yData = rtbsaUtils.filterBuffers(yData,
+                                                    lambda x:
+                                                    x < rtbsaUtils.IPK_LIMIT,
+                                                    xData, yData)
 
         if self.ui.filterByStdDevs.isChecked():
             stdDevFilterFunc = self.StdDevFilterFunc(mean(yData), std(yData))
-            xData, yData = self.filterBuffers(yData, stdDevFilterFunc, xData,
-                                              yData)
+            xData, yData = rtbsaUtils.filterBuffers(yData, stdDevFilterFunc,
+                                                    xData, yData)
         return xData, yData
 
-    @staticmethod
-    def setPosAndText(attribute, value, posValX, posValY, textVal):
-        value = "{:.3}".format(value)
-        attribute.setPos(posValX, posValY)
-        attribute.setText(textVal + str(value))
-
     def getLinearFit(self, xData, yData, updateExistingPlot):
-        try:
-            # noinspection PyTupleAssignmentBalance
-            m, b = polyfit(xData, yData, 1)
-            fitData = polyval([m, b], xData)
+        # noinspection PyTupleAssignmentBalance
+        m, b = polyfit(xData, yData, 1)
+        fitData = polyval([m, b], xData)
 
-            self.text["slope"].setText('Slope: ' + str("{:.3e}".format(m)))
+        self.text["slope"].setText('Slope: ' + str("{:.3e}".format(m)))
 
-            if updateExistingPlot:
-                self.plotAttributes["fit"].setData(xData, fitData)
-            else:
-                # noinspection PyTypeChecker
-                self.plotAttributes["fit"] = pg.PlotCurveItem(xData, fitData,
-                                                              'g-', linewidth=1)
-        except:
-            print("Error getting linear fit")
-            pass
+        if updateExistingPlot:
+            self.plotAttributes["fit"].setData(xData, fitData)
+        else:
+            # noinspection PyTypeChecker
+            self.plotAttributes["fit"] = pg.PlotCurveItem(xData, fitData,
+                                                          'g-', linewidth=1)
 
     def getPolynomialFit(self, xData, yData, updateExistingPlot):
         try:
@@ -796,9 +755,6 @@ class RTBSA(QMainWindow):
 
         except linalg.linalg.LinAlgError:
             print("Linear algebra error getting curve fit")
-            pass
-        except:
-            self.text["slope"].setText('Fit failed')
             pass
 
     def genPlotAB(self):
@@ -842,7 +798,7 @@ class RTBSA(QMainWindow):
 
         QApplication.processEvents()
 
-        self.populateSynchronizedBuffers()
+        self.adjustSynchronizedBuffers()
         self.filterNans()
         self.filterPeakCurrent()
 
@@ -865,9 +821,11 @@ class RTBSA(QMainWindow):
     # Need to filter out errant indices from both buffers to keep them
     # synchronized
     def filterData(self, dataBuffer, filterFunc, changeOriginal):
-        bufferA, bufferB = self.filterBuffers(dataBuffer, filterFunc,
-                                              self.synchronizedBuffers["A"],
-                                              self.synchronizedBuffers["B"])
+        bufferA, bufferB = rtbsaUtils.filterBuffers(dataBuffer, filterFunc,
+                                                    self.synchronizedBuffers[
+                                                        "A"],
+                                                    self.synchronizedBuffers[
+                                                        "B"])
 
         if changeOriginal:
             self.synchronizedBuffers["A"] = bufferA
@@ -876,15 +834,10 @@ class RTBSA(QMainWindow):
             self.filteredBuffers["A"] = bufferA
             self.filteredBuffers["B"] = bufferB
 
-    @staticmethod
-    def filterBuffers(bufferToFilter, filterFunc, xData, yData):
-        mask = filterFunc(bufferToFilter)
-        return xData[mask], yData[mask]
-
     # This PV gets insane values, apparently
     def filterPeakCurrent(self):
         def filterFunc(x):
-            return x < PEAK_CURRENT_LIMIT
+            return x < rtbsaUtils.IPK_LIMIT
 
         if self.devices["A"] == "BLEN:LI24:886:BIMAX":
             self.filterData(self.synchronizedBuffers["A"], filterFunc, True)
@@ -918,21 +871,22 @@ class RTBSA(QMainWindow):
         maxBufferB = nanmax(bufferB)
 
         if self.ui.avg_cb.isChecked():
-            self.setPosAndText(self.text["avg"], nanmean(bufferB), minBufferA,
-                               minBufferB, 'AVG: ')
+            rtbsaUtils.setPosAndText(self.text["avg"], nanmean(bufferB),
+                                     minBufferA,
+                                     minBufferB, 'AVG: ')
 
         if self.ui.std_cb.isChecked():
             xPos = (minBufferA + (minBufferA + maxBufferA) / 2) / 2
 
-            self.setPosAndText(self.text["std"], nanstd(bufferB), xPos,
-                               minBufferB,
-                               'STD: ')
+            rtbsaUtils.setPosAndText(self.text["std"], nanstd(bufferB), xPos,
+                                     minBufferB,
+                                     'STD: ')
 
         if self.ui.corr_cb.isChecked():
             correlation = corrcoef(bufferA, bufferB)
-            self.setPosAndText(self.text["corr"], correlation.item(1),
-                               minBufferA, maxBufferB,
-                               "Corr. Coefficient: ")
+            rtbsaUtils.setPosAndText(self.text["corr"], correlation.item(1),
+                                     minBufferA, maxBufferB,
+                                     "Corr. Coefficient: ")
 
         if self.ui.line_cb.isChecked():
             self.text["slope"].setPos((minBufferA + maxBufferA) / 2,
@@ -945,17 +899,21 @@ class RTBSA(QMainWindow):
             self.getPolynomialFit(bufferA, bufferB, True)
 
     def setPlotRanges(self, bufferA, bufferB):
-        mx = nanmax(bufferB)
-        mn = nanmin(bufferB)
+        try:
+            mx = nanmax(bufferB)
+            mn = nanmin(bufferB)
 
-        if mn != mx:
-            self.plot.setYRange(mn, mx)
+            if mn != mx:
+                self.plot.setYRange(mn, mx)
 
-        mx = nanmax(bufferA)
-        mn = nanmin(bufferA)
+            mx = nanmax(bufferA)
+            mn = nanmin(bufferA)
 
-        if mn != mx:
-            self.plot.setXRange(mn, mx)
+            if mn != mx:
+                self.plot.setXRange(mn, mx)
+                
+        except ValueError:
+            print "Error updating plot range"
 
     def InitializeFFTPlot(self):
         self.genPlotFFT(self.initializeData(), False)
@@ -1016,7 +974,8 @@ class RTBSA(QMainWindow):
             self.plot.addItem(plotLabel)
 
     def initializeData(self):
-        self.statusBar().showMessage('Initializing...')
+        self.printStatus("Initializing " + self.devices["A"] + " buffer...",
+                          True)
 
         if self.ui.common1_rb.isChecked():
             self.devices["A"] = str(self.ui.common1.currentText())
@@ -1204,34 +1163,26 @@ class RTBSA(QMainWindow):
     def reinitialize_plot(self):
         self.cleanPlot()
 
-        try:
-            # Setup for single PV plotting
-            if self.ui.AvsT_cb.isChecked():
-                self.genTimePlotA()
+        # Setup for single PV plotting
+        if self.ui.AvsT_cb.isChecked():
+            self.genTimePlotA()
 
-            elif self.ui.AvsB.isChecked():
-                self.genPlotAB()
-            else:
-                self.genPlotFFT(self.synchronizedBuffers["A"], False)
-
-        except:
-            print("Error reinitializing plot")
-            pass
+        elif self.ui.AvsB.isChecked():
+            self.genPlotAB()
+        else:
+            self.genPlotFFT(self.synchronizedBuffers["A"], False)
 
     def logbook(self):
-        logbook('Python Real-Time BSA', 'BSA Data',
-                str(self.numPoints) + ' points', self.plot.plotItem)
+        rtbsaUtils.logbook('Python Real-Time BSA', 'BSA Data',
+                           str(self.numPoints) + ' points', self.plot.plotItem)
         self.statusBar().showMessage('Sent to LCLS Physics Logbook!', 10000)
 
     def MCCLog(self):
-        MCCLog('/tmp/RTBSA.png', '/tmp/RTBSA.ps', self.plot.plotItem)
+        rtbsaUtils.MCCLog('/tmp/RTBSA.png', '/tmp/RTBSA.ps', self.plot.plotItem)
 
     def clearCallbacks(self, device):
-        try:
-            self.pvObjects[device].clear_callbacks()
-            self.pvObjects[device].disconnect()
-        except:
-            self.statusBar().showMessage('Error clearing callbacks')
+        self.pvObjects[device].clear_callbacks()
+        self.pvObjects[device].disconnect()
 
     def clearBuffers(self, device):
         self.rawBuffers[device] = []
@@ -1240,7 +1191,10 @@ class RTBSA(QMainWindow):
 
     def stop(self):
         self.clearCallbacks("A")
-        self.clearCallbacks("B")
+
+        if self.pvObjects["B"]:
+            self.clearCallbacks("B")
+
         self.abort = True
         self.statusBar().showMessage('Stopped')
         self.ui.draw_button.setDisabled(False)
@@ -1256,20 +1210,13 @@ class RTBSA(QMainWindow):
                                          shortcut="Ctrl+Q",
                                          tip="Close the application")
 
-        self.add_actions(self.file_menu, (load_file_action, None, quit_action))
+        rtbsaUtils.add_actions(self.file_menu, (load_file_action, None,
+                                                quit_action))
 
         about_action = self.create_action("&About", shortcut='F1',
                                           slot=self.on_about, tip='About')
 
-        self.add_actions(self.help_menu, (about_action,))
-
-    @staticmethod
-    def add_actions(target, actions):
-        for action in actions:
-            if action is None:
-                target.addSeparator()
-            else:
-                target.addAction(action)
+        rtbsaUtils.add_actions(self.help_menu, (about_action,))
 
     def create_action(self, text, slot=None, shortcut=None, icon=None, tip=None,
                       checkable=False, signal="triggered()"):
