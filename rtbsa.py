@@ -1,8 +1,8 @@
 #!/usr/local/lcls/package/python/current/bin/python
 # Written by Zimmer, edited by Ahmed, refactored by Lisa
-import os
-import sys
-import time
+from os import path
+from sys import argv, exit
+from time import time
 
 from epics import PV
 
@@ -14,7 +14,7 @@ from numpy import (polyfit, poly1d, polyval, corrcoef, std, mean, concatenate,
 from PyQt4.QtCore import QTimer, QObject, SIGNAL, Qt
 from PyQt4.QtGui import (QMainWindow, QLabel, QGridLayout, QPalette,
                          QApplication, QAction, QFileDialog, QIcon, QMessageBox)
-import pyqtgraph as pg
+from pyqtgraph import PlotWidget, PlotCurveItem, ScatterPlotItem, TextItem
 
 from scipy.stats import nanmean, nanstd
 from subprocess import CalledProcessError, check_output
@@ -31,7 +31,7 @@ class RTBSA(QMainWindow):
         self.help_menu = self.menuBar().addMenu("&Help")
         self.file_menu = self.menuBar().addMenu("&File")
         self.status_text = QLabel()
-        self.plot = pg.PlotWidget(alpha=0.75)
+        self.plot = PlotWidget(alpha=0.75)
         self.ui = Ui_RTBSA()
         self.ui.setupUi(self)
         self.setWindowTitle('Real Time BSA')
@@ -204,8 +204,8 @@ class RTBSA(QMainWindow):
         self.plot.showGrid(1, 1)
 
     def loadStyleSheet(self):
-        currDir = os.path.abspath(os.path.dirname(__file__))
-        cssFile = os.path.join(currDir, "style.css")
+        currDir = path.abspath(path.dirname(__file__))
+        cssFile = path.join(currDir, "style.css")
         try:
             with open(cssFile, "r") as f:
                 self.setStyleSheet(f.read())
@@ -507,7 +507,7 @@ class RTBSA(QMainWindow):
     # A spin loop that waits until the beam rate is at least 1Hz
     def waitForRate(self):
 
-        start_time = time.time()
+        start_time = time()
         gotStuckAndNeedToUpdateMessage = False
 
         # self.rate is a PV, such that .value is shorthand for .getval
@@ -515,7 +515,7 @@ class RTBSA(QMainWindow):
             # noinspection PyArgumentList
             QApplication.processEvents()
 
-            if time.time() - start_time > 0.5:
+            if time() - start_time > 0.5:
                 gotStuckAndNeedToUpdateMessage = True
                 self.printStatus("Waiting for beam rate to be at least 1Hz...",
                                  False)
@@ -561,10 +561,18 @@ class RTBSA(QMainWindow):
     # pulse ID modulo 2800, so they're inherently synchronized
     ############################################################################
     def populateSynchronizedBuffers(self, syncByTime):
+
         def padSyncBufferWithNans(device, startIdx, endIdx):
             rtbsaUtils.padWithNans(self.synchronizedBuffers[device],
-                                   startIdx - 2,
-                                   endIdx + 1)
+                                   startIdx - 2, endIdx + 1)
+
+        def checkIndices(device, startIdx, endIdx):
+            # Check for index wraparound
+            if endIdx < startIdx:
+                padSyncBufferWithNans(device, startIdx, self.numPoints - 1)
+                padSyncBufferWithNans(device, 0, endIdx)
+            else:
+                padSyncBufferWithNans(device, startIdx, endIdx)
 
         if syncByTime:
             numBadShots = int(round((self.timeStamps["B"] - self.timeStamps["A"])
@@ -582,16 +590,21 @@ class RTBSA(QMainWindow):
             self.synchronizedBuffers["A"] = self.rawBuffers["A"]
             self.synchronizedBuffers["B"] = self.rawBuffers["B"]
 
+            # The timestamps and indices get updated by the callbacks, so we
+            # store the values at the time of buffer-copying
+            timeStampA = self.timeStamps["A"]
+            timeStampB = self.timeStamps["B"]
+
             currIdxA = self.currIdx["A"]
             currIdxB = self.currIdx["B"]
 
-            diff = currIdxA - currIdxB
+            diff = timeStampA - timeStampB
 
             if diff > 0:
-                padSyncBufferWithNans("A", currIdxB, currIdxA)
+                checkIndices("A", currIdxB, currIdxA)
 
             elif diff < 0:
-                padSyncBufferWithNans("B", currIdxA, currIdxB)
+                checkIndices("B", currIdxA, currIdxB)
 
             return 0
 
@@ -623,7 +636,7 @@ class RTBSA(QMainWindow):
 
         data = newData[:self.numPoints]
 
-        self.plotAttributes["curve"] = pg.PlotCurveItem(data, pen=1)
+        self.plotAttributes["curve"] = PlotCurveItem(data, pen=1)
         self.plot.addItem(self.plotAttributes["curve"])
 
         self.plotFit(arange(self.numPoints), data, self.devices["A"])
@@ -725,8 +738,8 @@ class RTBSA(QMainWindow):
             self.plotAttributes["fit"].setData(xData, fitData)
         else:
             # noinspection PyTypeChecker
-            self.plotAttributes["fit"] = pg.PlotCurveItem(xData, fitData,
-                                                          'g-', linewidth=1)
+            self.plotAttributes["fit"] = PlotCurveItem(xData, fitData, 'g-',
+                                                       linewidth=1)
 
     def getPolynomialFit(self, xData, yData, updateExistingPlot):
         try:
@@ -739,9 +752,8 @@ class RTBSA(QMainWindow):
                 self.plotAttributes["parab"].setData(xDataSorted, fit)
             else:
                 # noinspection PyTypeChecker
-                self.plotAttributes["parab"] = pg.PlotCurveItem(xDataSorted,
-                                                                fit, pen=3,
-                                                                size=2)
+                self.plotAttributes["parab"] = PlotCurveItem(xDataSorted, fit,
+                                                             pen=3, size=2)
 
             if self.fitOrder == 2:
                 self.text["slope"].setText('Peak: ' + str(-co[1] / (2 * co[0])))
@@ -767,8 +779,8 @@ class RTBSA(QMainWindow):
 
     def plotCurveAndFit(self, xData, yData):
         # noinspection PyTypeChecker
-        self.plotAttributes["curve"] = pg.ScatterPlotItem(xData, yData, pen=1,
-                                                          symbol='x', size=5)
+        self.plotAttributes["curve"] = ScatterPlotItem(xData, yData, pen=1,
+                                                       symbol='x', size=5)
         self.plot.addItem(self.plotAttributes["curve"])
         self.plotFit(xData, yData,
                      self.devices["B"] + ' vs. ' + self.devices["A"])
@@ -946,8 +958,8 @@ class RTBSA(QMainWindow):
             self.plotAttributes["curve"].setData(x=frequencies[idx], y=ps[idx])
         else:
             # noinspection PyTypeChecker
-            self.plotAttributes["curve"] = pg.PlotCurveItem(x=frequencies[idx],
-                                                            y=ps[idx], pen=1)
+            self.plotAttributes["curve"] = PlotCurveItem(x=frequencies[idx],
+                                                         y=ps[idx], pen=1)
 
         self.plot.addItem(self.plotAttributes["curve"])
         self.plot.setTitle(self.devices["A"])
@@ -959,12 +971,10 @@ class RTBSA(QMainWindow):
     def cleanPlot(self):
         self.plot.clear()
 
-        self.text["avg"] = pg.TextItem('', color=(200, 200, 250), anchor=(0, 1))
-        self.text["std"] = pg.TextItem('', color=(200, 200, 250), anchor=(0, 1))
-        self.text["slope"] = pg.TextItem('', color=(200, 200, 250),
-                                         anchor=(0, 1))
-        self.text["corr"] = pg.TextItem('', color=(200, 200, 250),
-                                        anchor=(0, 1))
+        self.text["avg"] = TextItem('', color=(200, 200, 250), anchor=(0, 1))
+        self.text["std"] = TextItem('', color=(200, 200, 250), anchor=(0, 1))
+        self.text["slope"] = TextItem('', color=(200, 200, 250), anchor=(0, 1))
+        self.text["corr"] = TextItem('', color=(200, 200, 250), anchor=(0, 1))
 
         plotLabels = [self.text["avg"], self.text["std"], self.text["slope"],
                       self.text["corr"]]
@@ -974,7 +984,7 @@ class RTBSA(QMainWindow):
 
     def initializeData(self):
         self.printStatus("Initializing " + self.devices["A"] + " buffer...",
-                          True)
+                         True)
 
         if self.ui.common1_rb.isChecked():
             self.devices["A"] = str(self.ui.common1.currentText())
@@ -1238,11 +1248,11 @@ class RTBSA(QMainWindow):
     def save_plot(self):
         file_choices = "PNG (*.png)|*.png"
         # noinspection PyTypeChecker,PyCallByClass
-        path = unicode(QFileDialog.getSaveFileName(self, 'Save file', '',
-                                                   file_choices))
-        if path:
-            self.ui.widget.canvas.print_figure(path, dpi=100)
-            self.statusBar().showMessage('Saved to %s' % path, 2000)
+        filePath = unicode(QFileDialog.getSaveFileName(self, 'Save file', '',
+                                                       file_choices))
+        if filePath:
+            self.ui.widget.canvas.print_figure(filePath, dpi=100)
+            self.statusBar().showMessage('Saved to %s' % filePath, 2000)
 
     def on_about(self):
         msg = ("Can you read this?  If so, congratulations. You are a magical, "
@@ -1253,10 +1263,10 @@ class RTBSA(QMainWindow):
 
 # TODO I bless the rains down in Africa!
 def main():
-    app = QApplication(sys.argv)
+    app = QApplication(argv)
     window = RTBSA()
     window.show()
-    sys.exit(app.exec_())
+    exit(app.exec_())
 
 
 if __name__ == "__main__":

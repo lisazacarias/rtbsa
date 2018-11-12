@@ -1,5 +1,5 @@
 from numpy import nan
-import pyqtgraph as pg
+from pyqtgraph import exporters
 from subprocess import Popen
 from time import sleep
 import os
@@ -132,7 +132,7 @@ def logbook(userText, titleText, textText, plotItem):
     xmlFile.write("\n")
 
     xmlFile.close()
-    exporter = pg.exporters.ImageExporter(plotItem)
+    exporter = exporters.ImageExporter(plotItem)
     # exporter.parameters()['width'] = 550
     exporter.export(fileName + '.png')
     # PyQtGraph doesn't export PS files, so convert with linux
@@ -149,7 +149,7 @@ def logbook(userText, titleText, textText, plotItem):
 
 
 def MCCLog(tmpPNG, tmpPS, plotItem):
-    exporter = pg.exporters.ImageExporter(plotItem)
+    exporter = exporters.ImageExporter(plotItem)
     exporter.export(tmpPNG)
     Popen("convert " + tmpPNG + " " + tmpPS, shell=True)
     sleep(0.1)
