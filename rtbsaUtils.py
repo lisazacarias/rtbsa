@@ -11,6 +11,8 @@ from shutil import copy
 
 IPK_LIMIT = 12000
 
+BUFF_LENGTH_LIMIT = 10000
+
 
 # IOC:IN20:EV01:RG01_ACTRATE returns one of 7 states, 0 through 6, where
 # 0 is NULL (unclear what that means, but doesn't sound good), 1 is 0Hz,
@@ -53,19 +55,19 @@ def padWithNans(dataBuffer, start, end):
 #
 #               max(0, mult * numBadShots) -> max(0, -k) -> 0
 #
-#               min(2800, 2800 + (mult * numBadShots))
-#               -> min(2800, 2800 - k) -> 2800-k
+#               min(BUFF_LENGTH_LIMIT, BUFF_LENGTH_LIMIT + (mult * numBadShots))
+#               -> min(BUFF_LENGTH_LIMIT, BUFF_LENGTH_LIMIT - k) -> BUFF_LENGTH_LIMIT-k
 #
-#               And we get [0, 2800-k] for buffer A
+#               And we get [0, BUFF_LENGTH_LIMIT-k] for buffer A
 #
 #       Case B: The multiplier for B's indices is -1, so:
 #
 #               max(0, mult * numBadShots) -> max(0, k) -> k
 #
-#               min(2800, 2800 + (mult * numBadShots))
-#               -> min(2800, 2800 + k) -> 2800
+#               min(BUFF_LENGTH_LIMIT, BUFF_LENGTH_LIMIT + (mult * numBadShots))
+#               -> min(BUFF_LENGTH_LIMIT, BUFF_LENGTH_LIMIT + k) -> BUFF_LENGTH_LIMIT
 #
-#               And we get [k, 2800] for buffer B
+#               And we get [k, BUFF_LENGTH_LIMIT] for buffer B
 #
 # Case 2: Using similar logic, the inverse is true when numBadShots is
 #         positive
@@ -78,7 +80,7 @@ def padWithNans(dataBuffer, start, end):
 def getIndices(numBadShots, mult):
 
     return (max(0, mult * numBadShots),
-            min(2800, 2800 + (mult * numBadShots)))
+            min(BUFF_LENGTH_LIMIT, BUFF_LENGTH_LIMIT + (mult * numBadShots)))
 
 
 # Shamelessly stolen from Shawn (thanks buddy). A lot of this is probably
@@ -157,7 +159,7 @@ def MCCLog(tmpPNG, tmpPS, plotItem):
     os.system(printFile)
 
 
-commonlist = ['GDET:FEE1:241:ENRC', 'GDET:FEE1:242:ENRC',
+commonList = ['GDET:FEE1:241:ENRC', 'GDET:FEE1:242:ENRC',
               'GDET:FEE1:361:ENRC', 'GDET:FEE1:362:ENRC',
               'KLYS:LI20:K6:VOLT', 'ACCL:IN20:300:L0A_P',
               'ACCL:IN20:300:L0A_A', 'KLYS:LI20:K7:VOLT',
