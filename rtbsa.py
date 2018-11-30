@@ -1,6 +1,5 @@
 #!/usr/local/lcls/package/python/current/bin/python
 # Written by Zimmer, edited by Ahmed, refactored by Lisa
-from collections import defaultdict
 
 from os import path
 from sys import argv, exit
@@ -569,10 +568,10 @@ class RTBSA(QMainWindow):
     def populateSynchronizedBuffers(self, syncByTime):
 
         def padSyncBufferWithNans(device, startIdx, endIdx):
-            diff = endIdx - startIdx
-            
-            if diff > 20:
-                print ("Reinitializing buffers due to " + str(diff)
+            lag = endIdx - startIdx
+
+            if lag > 20:
+                print ("Reinitializing buffers due to " + str(lag)
                        + " shot lag for device " + device)
                 self.initializeBuffers()
 
@@ -585,6 +584,7 @@ class RTBSA(QMainWindow):
             if endIdx < startIdx:
                 padSyncBufferWithNans(device, startIdx, self.numPoints - 1)
                 padSyncBufferWithNans(device, 0, endIdx)
+
             else:
                 padSyncBufferWithNans(device, startIdx, endIdx)
 
