@@ -771,32 +771,28 @@ class RTBSA(QMainWindow):
                                                        linewidth=1)
 
     def getPolynomialFit(self, xData, yData, updateExistingPlot):
-        try:
-            co = polyfit(xData, yData, self.fitOrder)
-            pol = poly1d(co)
-            xDataSorted = sorted(xData)
-            fit = pol(xDataSorted)
+        co = polyfit(xData, yData, self.fitOrder)
+        pol = poly1d(co)
+        xDataSorted = sorted(xData)
+        fit = pol(xDataSorted)
 
-            if updateExistingPlot:
-                self.plotAttributes["parab"].setData(xDataSorted, fit)
-            else:
-                # noinspection PyTypeChecker
-                self.plotAttributes["parab"] = PlotCurveItem(xDataSorted, fit,
-                                                             pen=3, size=2)
+        if updateExistingPlot:
+            self.plotAttributes["parab"].setData(xDataSorted, fit)
+        else:
+            # noinspection PyTypeChecker
+            self.plotAttributes["parab"] = PlotCurveItem(xDataSorted, fit,
+                                                         pen=3, size=2)
 
-            if self.fitOrder == 2:
-                self.text["slope"].setText('Peak: ' + str(-co[1] / (2 * co[0])))
+        if self.fitOrder == 2:
+            self.text["slope"].setText('Peak: ' + str(-co[1] / (2 * co[0])))
 
-            elif self.fitOrder == 3:
-                self.text["slope"].setText(str("{:.2e}".format(co[0])) + 'x^3'
-                                           + str("+{:.2e}".format(co[1]))
-                                           + 'x^2'
-                                           + str("+{:.2e}".format(co[2])) + 'x'
-                                           + str("+{:.2e}".format(co[3])))
+        elif self.fitOrder == 3:
+            self.text["slope"].setText(str("{:.2e}".format(co[0])) + 'x^3'
+                                       + str("+{:.2e}".format(co[1]))
+                                       + 'x^2'
+                                       + str("+{:.2e}".format(co[2])) + 'x'
+                                       + str("+{:.2e}".format(co[3])))
 
-        except linalg.linalg.LinAlgError:
-            print("Linear algebra error getting curve fit")
-            pass
 
     def genPlotAB(self):
         if self.ui.filterByStdDevs.isChecked():
@@ -826,8 +822,11 @@ class RTBSA(QMainWindow):
         # Fit polynomial
         elif self.ui.parab_cb.isChecked():
             self.ui.fitedit.setDisabled(False)
-            self.getPolynomialFit(xData, yData, False)
-            self.plot.addItem(self.plotAttributes["parab"])
+            try:
+                self.getPolynomialFit(xData, yData, False)
+                self.plot.addItem(self.plotAttributes["parab"])
+            except linalg.linalg.LinAlgError:
+                print "Error getting polynomial fit"
 
     ############################################################################
     # This is the main plotting function for "Plot B vs A" that gets called
@@ -1183,6 +1182,7 @@ class RTBSA(QMainWindow):
         else:
             self.ui.fitedit.setEnabled(True)
             self.ui.label.setEnabled(True)
+
         self.reinitialize_plot()
 
     # This is a mess, but it works (used if user changes number points,
@@ -1208,8 +1208,9 @@ class RTBSA(QMainWindow):
         rtbsaUtils.MCCLog('/tmp/RTBSA.png', '/tmp/RTBSA.ps', self.plot.plotItem)
 
     def clearCallbacks(self, device):
-        self.pvObjects[device].clear_callbacks()
-        self.pvObjects[device].disconnect()
+        if self.pvObjects[device]:
+            self.pvObjects[device].clear_callbacks()
+            self.pvObjects[device].disconnect()
 
     def stop(self):
 
