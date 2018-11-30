@@ -1,5 +1,7 @@
 #!/usr/local/lcls/package/python/current/bin/python
 # Written by Zimmer, edited by Ahmed, refactored by Lisa
+from collections import defaultdict
+
 from os import path
 from sys import argv, exit
 from time import time
@@ -367,6 +369,11 @@ class RTBSA(QMainWindow):
         self.printStatus("Initializing/Synchronizing " + self.devices["A"]
                          + " vs. " + self.devices["B"] + " buffers...")
 
+        self.initializeBuffers()
+
+        return True
+
+    def initializeBuffers(self):
         # Initial population of our buffers using the HSTBR PV's in our
         # callback functions
         self.clearAndUpdateCallbacks("HSTBR", resetTime=True)
@@ -380,8 +387,6 @@ class RTBSA(QMainWindow):
         # Switch to BR PVs to avoid pulling an entire history buffer on every
         # update.
         self.clearAndUpdateCallbacks("BR", resetRawBuffer=True)
-
-        return True
 
     def clearAndUpdateCallbacks(self, suffix, resetTime=False,
                                 resetRawBuffer=False):
@@ -466,6 +471,7 @@ class RTBSA(QMainWindow):
 
             # Pad the buffer with nans for missed pulses
             elif elapsedPulses > 1:
+                # print elapsedPulses
 
                 # noinspection PyTypeChecker
                 lastIdx = int((self.timeStamps[device] / scalingFactor)
@@ -563,8 +569,16 @@ class RTBSA(QMainWindow):
     def populateSynchronizedBuffers(self, syncByTime):
 
         def padSyncBufferWithNans(device, startIdx, endIdx):
-            rtbsaUtils.padWithNans(self.synchronizedBuffers[device],
-                                   startIdx - 2, endIdx + 1)
+            diff = endIdx - startIdx
+            
+            if diff > 20:
+                print ("Reinitializing buffers due to " + str(diff)
+                       + " shot lag for device " + device)
+                self.initializeBuffers()
+
+            else:
+                rtbsaUtils.padWithNans(self.synchronizedBuffers[device],
+                                       startIdx + 1, endIdx + 1)
 
         def checkIndices(device, startIdx, endIdx):
             # Check for index wraparound
@@ -585,6 +599,7 @@ class RTBSA(QMainWindow):
             self.synchronizedBuffers["B"] = self.rawBuffers["B"][startB:endB]
 
             return abs(numBadShots)
+
         else:
 
             self.synchronizedBuffers["A"] = self.rawBuffers["A"]
