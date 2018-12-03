@@ -470,7 +470,6 @@ class RTBSA(QMainWindow):
 
             # Pad the buffer with nans for missed pulses
             elif elapsedPulses > 1:
-                # print elapsedPulses
 
                 # noinspection PyTypeChecker
                 lastIdx = int((self.timeStamps[device] / scalingFactor)
