@@ -126,6 +126,11 @@ class RTBSA(QMainWindow):
             # bsaPVs is pulled from the Constants file
             self.bsapvs.extend(rtbsaUtils.bsaPVs)
 
+        # TODO un-hardcode machine and add common SPEAR PV's
+        except OSError:
+            print "Other machines coming soon to an RTBSA near you!"
+            pass
+
         for pv in self.bsapvs:
             self.ui.bsaListA.addItem(pv)
             self.ui.bsaListB.addItem(pv)
@@ -314,7 +319,8 @@ class RTBSA(QMainWindow):
         # Plot history buffer for one PV
         if self.ui.checkBoxAvsT.isChecked():
             if self.populateDevices(self.ui.dropdownButtonA, self.ui.dropdownA,
-                                    self.ui.searchButtonA, self.ui.searchInputA, "A"):
+                                    self.ui.searchButtonA, self.ui.searchInputA,
+                                    "A"):
                 self.genPlotAndSetTimer(self.genTimePlotA,
                                         self.updateTimePlotA)
 
@@ -327,7 +333,8 @@ class RTBSA(QMainWindow):
         # Plot power spectrum
         else:
             if self.populateDevices(self.ui.dropdownButtonA, self.ui.dropdownA,
-                                    self.ui.searchButtonA, self.ui.searchInputA, "A"):
+                                    self.ui.searchButtonA, self.ui.searchInputA,
+                                    "A"):
                 self.genPlotAndSetTimer(self.InitializeFFTPlot,
                                         self.updatePlotFFT)
 
@@ -358,11 +365,13 @@ class RTBSA(QMainWindow):
     def updateValsFromInput(self):
 
         if not self.populateDevices(self.ui.dropdownButtonA, self.ui.dropdownA,
-                                    self.ui.searchButtonA, self.ui.searchInputA, "A"):
+                                    self.ui.searchButtonA, self.ui.searchInputA,
+                                    "A"):
             return False
 
         if not self.populateDevices(self.ui.dropdownButtonB, self.ui.dropdownB,
-                                    self.ui.searchButtonB, self.ui.searchInputB, "B"):
+                                    self.ui.searchButtonB, self.ui.searchInputB,
+                                    "B"):
             return False
 
         self.printStatus("Initializing/Synchronizing " + self.devices["A"]
@@ -588,7 +597,8 @@ class RTBSA(QMainWindow):
                 padSyncBufferWithNans(device, startIdx, endIdx)
 
         if syncByTime:
-            numBadShots = int(round((self.timeStamps["B"] - self.timeStamps["A"])
+            numBadShots = int(round((self.timeStamps["B"]
+                                     - self.timeStamps["A"])
                                     * self.getRate()))
 
             startA, endA = rtbsaUtils.getIndices(numBadShots, 1)
@@ -777,7 +787,6 @@ class RTBSA(QMainWindow):
                                        + 'x^2'
                                        + str("+{:.2e}".format(co[2])) + 'x'
                                        + str("+{:.2e}".format(co[3])))
-
 
     def genPlotAB(self):
         if self.ui.checkBoxStdDev.isChecked():

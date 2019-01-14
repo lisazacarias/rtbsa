@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>941</width>
+    <width>943</width>
     <height>863</height>
    </rect>
   </property>
@@ -14,8 +14,8 @@
    <string>MainWindow</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <layout class="QGridLayout" name="gridLayout">
-    <item row="0" column="0" alignment="Qt::AlignHCenter|Qt::AlignBottom">
+   <layout class="QVBoxLayout" name="verticalLayout_5">
+    <item>
      <widget class="QSplitter" name="splitter">
       <property name="minimumSize">
        <size>
@@ -55,15 +55,15 @@
         </size>
        </property>
       </widget>
-      <widget class="QFrame" name="">
+      <widget class="QFrame" name="frame">
        <property name="maximumSize">
         <size>
          <width>16777215</width>
          <height>280</height>
         </size>
        </property>
-       <layout class="QHBoxLayout" name="horizontalLayout">
-        <item alignment="Qt::AlignHCenter|Qt::AlignVCenter">
+       <layout class="QGridLayout" name="gridLayout">
+        <item row="0" column="0">
          <widget class="QGroupBox" name="groupBoxA">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Preferred" vsizetype="MinimumExpanding">
@@ -142,6 +142,12 @@
                  <horstretch>0</horstretch>
                  <verstretch>0</verstretch>
                 </sizepolicy>
+               </property>
+               <property name="maximumSize">
+                <size>
+                 <width>90</width>
+                 <height>16777215</height>
+                </size>
                </property>
                <property name="palette">
                 <palette>
@@ -556,7 +562,7 @@
           </layout>
          </widget>
         </item>
-        <item alignment="Qt::AlignHCenter|Qt::AlignVCenter">
+        <item row="0" column="1">
          <widget class="QGroupBox" name="groupBoxB">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Preferred" vsizetype="MinimumExpanding">
@@ -635,6 +641,12 @@
                  <horstretch>0</horstretch>
                  <verstretch>0</verstretch>
                 </sizepolicy>
+               </property>
+               <property name="maximumSize">
+                <size>
+                 <width>90</width>
+                 <height>16777215</height>
+                </size>
                </property>
                <property name="palette">
                 <palette>
@@ -968,7 +980,7 @@
           </layout>
          </widget>
         </item>
-        <item alignment="Qt::AlignHCenter|Qt::AlignVCenter">
+        <item row="0" column="2">
          <widget class="QGroupBox" name="groupBoxControls">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Preferred" vsizetype="MinimumExpanding">
@@ -984,7 +996,7 @@
           </property>
           <property name="maximumSize">
            <size>
-            <width>16777215</width>
+            <width>140</width>
             <height>16777215</height>
            </size>
           </property>
@@ -1410,7 +1422,7 @@
           </layout>
          </widget>
         </item>
-        <item alignment="Qt::AlignHCenter|Qt::AlignVCenter">
+        <item row="0" column="3">
          <widget class="QGroupBox" name="groupBoxSettings">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Preferred" vsizetype="MinimumExpanding">
@@ -1426,7 +1438,7 @@
           </property>
           <property name="maximumSize">
            <size>
-            <width>16777215</width>
+            <width>160</width>
             <height>16777215</height>
            </size>
           </property>
@@ -2328,7 +2340,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>941</width>
+     <width>943</width>
      <height>26</height>
     </rect>
    </property>
