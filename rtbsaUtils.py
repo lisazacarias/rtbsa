@@ -17,7 +17,8 @@ BUFF_LENGTH_LIMIT = 10000
 # IOC:IN20:EV01:RG01_ACTRATE returns one of 7 states, 0 through 6, where
 # 0 is NULL (unclear what that means, but doesn't sound good), 1 is 0Hz,
 # 2 is 1Hz, 3 is 10Hz, 4 is 30Hz, 5 is 60Hz, and 6 is 120Hz
-rateDict = {0: 0.0, 1: 0.0, 2: 1.0, 3: 10.0, 4: 30.0, 5: 60.0, 6: 120.0, 7: 120.0}
+rateDict = {0: 0.0, 1: 0.0, 2: 1.0, 3: 10.0, 4: 30.0, 5: 60.0, 6: 120.0,
+            7: 120.0}
 
 
 def setPosAndText(attribute, value, posValX, posValY, textVal):
@@ -56,7 +57,8 @@ def padWithNans(dataBuffer, start, end):
 #               max(0, mult * numBadShots) -> max(0, -k) -> 0
 #
 #               min(BUFF_LENGTH_LIMIT, BUFF_LENGTH_LIMIT + (mult * numBadShots))
-#               -> min(BUFF_LENGTH_LIMIT, BUFF_LENGTH_LIMIT - k) -> BUFF_LENGTH_LIMIT-k
+#               -> min(BUFF_LENGTH_LIMIT, BUFF_LENGTH_LIMIT - k)
+#               -> BUFF_LENGTH_LIMIT-k
 #
 #               And we get [0, BUFF_LENGTH_LIMIT-k] for buffer A
 #
@@ -65,7 +67,8 @@ def padWithNans(dataBuffer, start, end):
 #               max(0, mult * numBadShots) -> max(0, k) -> k
 #
 #               min(BUFF_LENGTH_LIMIT, BUFF_LENGTH_LIMIT + (mult * numBadShots))
-#               -> min(BUFF_LENGTH_LIMIT, BUFF_LENGTH_LIMIT + k) -> BUFF_LENGTH_LIMIT
+#               -> min(BUFF_LENGTH_LIMIT, BUFF_LENGTH_LIMIT + k)
+#               -> BUFF_LENGTH_LIMIT
 #
 #               And we get [k, BUFF_LENGTH_LIMIT] for buffer B
 #
@@ -119,7 +122,8 @@ def logbook(userText, titleText, textText, plotItem):
 
     # If field is truly empty, ElementTree leaves off tag entirely which
     # causes logbook parser to fail
-    if text.text == "": text.text = " "
+    if text.text == "":
+        text.text = " "
 
     xmlFile = open(fileName + '.xml', "w")
     rawString = ElementTree.tostring(log_entry, 'utf-8')

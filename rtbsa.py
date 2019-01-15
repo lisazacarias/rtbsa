@@ -111,14 +111,14 @@ class RTBSA(QMainWindow):
         return rtbsaUtils.rateDict[self.ratePV.value]
 
     def disableInputs(self):
-        self.ui.fitedit.setDisabled(True)
-        self.ui.enter1.setDisabled(True)
-        self.ui.enter2.setDisabled(True)
-        self.ui.label.setDisabled(True)
-        self.ui.listWidget.setDisabled(True)
-        self.ui.listWidget_2.setDisabled(True)
+        self.ui.fitOrder.setDisabled(True)
+        self.ui.searchInputA.setDisabled(True)
+        self.ui.searchInputB.setDisabled(True)
+        self.ui.labelFitOrder.setDisabled(True)
+        self.ui.bsaListA.setDisabled(True)
+        self.ui.bsaListB.setDisabled(True)
         self.statusBar().showMessage('Hi there!  I missed you!')
-        self.ui.parab_cb.setChecked(False)
+        self.ui.checkBoxPolyFit.setChecked(False)
 
     def populateBSAPVs(self):
         # Generate list of BSA PVS
@@ -133,81 +133,86 @@ class RTBSA(QMainWindow):
             # bsaPVs is pulled from the Constants file
             self.bsapvs.extend(rtbsaUtils.bsaPVs)
 
+        # TODO un-hardcode machine and add common SPEAR PV's
+        except OSError:
+            print "Other machines coming soon to an RTBSA near you!"
+            pass
+
         for pv in self.bsapvs:
-            self.ui.listWidget.addItem(pv)
-            self.ui.listWidget_2.addItem(pv)
+            self.ui.bsaListA.addItem(pv)
+            self.ui.bsaListB.addItem(pv)
 
     def connectGuiFunctions(self):
         # enter 1 is the text input box for device A, and 2 is for B
-        QObject.connect(self.ui.enter1, SIGNAL("textChanged(const QString&)"),
+        QObject.connect(self.ui.searchInputA, SIGNAL("textChanged(const QString&)"),
                         self.searchA)
-        QObject.connect(self.ui.enter2, SIGNAL("textChanged(const QString&)"),
+        QObject.connect(self.ui.searchInputB, SIGNAL("textChanged(const QString&)"),
                         self.searchB)
 
         # Changes the text in the input box to match the selection from the list
-        self.ui.listWidget.itemClicked.connect(self.setEnterA)
-        self.ui.listWidget_2.itemClicked.connect(self.setEnterB)
+        self.ui.bsaListA.itemClicked.connect(self.setEnterA)
+        self.ui.bsaListB.itemClicked.connect(self.setEnterB)
 
         # Dropdown menu for device A (add common BSA PV's)
-        self.ui.common1.addItems(rtbsaUtils.commonList)
+        self.ui.dropdownA.addItems(rtbsaUtils.commonlist)
 
         # Make bunch length default selection
-        index = rtbsaUtils.commonList.index("BLEN:LI24:886:BIMAX")
-        self.ui.common1.setCurrentIndex(index)
+        index = rtbsaUtils.commonlist.index("BLEN:LI24:886:BIMAX")
+        self.ui.dropdownA.setCurrentIndex(index)
 
-        self.ui.common1.activated.connect(self.inputActivated)
+        self.ui.dropdownA.activated.connect(self.inputActivated)
 
         # Dropdown menu for device B
-        self.ui.common2.addItems(rtbsaUtils.commonList)
-        self.ui.common2.activated.connect(self.inputActivated)
+        self.ui.dropdownB.addItems(rtbsaUtils.commonlist)
+        self.ui.dropdownB.activated.connect(self.inputActivated)
 
         # All the checkboxes in the Settings section
-        self.ui.AvsT_cb.clicked.connect(self.AvsTClick)
-        self.ui.AvsB.clicked.connect(self.AvsBClick)
-        self.ui.AFFT.clicked.connect(self.AFFTClick)
-        self.ui.avg_cb.clicked.connect(self.avg_click)
-        self.ui.std_cb.clicked.connect(self.std_click)
-        self.ui.corr_cb.clicked.connect(self.corr_click)
-        self.ui.parab_cb.clicked.connect(self.parab_click)
-        self.ui.line_cb.clicked.connect(self.line_click)
-        self.ui.grid_cb.clicked.connect(self.showGrid)
+        self.ui.checkBoxAvsT.clicked.connect(self.AvsTClick)
+        self.ui.checkBoxBvsA.clicked.connect(self.AvsBClick)
+        self.ui.checkBoxFFT.clicked.connect(self.AFFTClick)
+        self.ui.checkBoxShowAve.clicked.connect(self.avg_click)
+        self.ui.checkBoxShowStdDev.clicked.connect(self.std_click)
+        self.ui.checkBoxCorrCoeff.clicked.connect(self.corr_click)
+        self.ui.checkBoxPolyFit.clicked.connect(self.parab_click)
+        self.ui.checkBoxLinFit.clicked.connect(self.line_click)
+        self.ui.checkBoxShowGrid.clicked.connect(self.showGrid)
 
         # All the buttons in the Controls section
-        self.ui.draw_button.clicked.connect(self.initializePlot)
-        self.ui.stop_button.clicked.connect(self.stop)
-        self.ui.log_button.clicked.connect(self.logbook)
-        self.ui.mcclog_button.clicked.connect(self.MCCLog)
+        self.ui.startButton.clicked.connect(self.initializePlot)
+        self.ui.stopButton.clicked.connect(self.stop)
+        self.ui.lclsLogButton.clicked.connect(self.logbook)
+        self.ui.mccLogButton.clicked.connect(self.MCCLog)
 
         # fitedit is the text input box for "Order"
-        self.ui.fitedit.returnPressed.connect(self.fitOrderActivated)
+        self.ui.fitOrder.returnPressed.connect(self.fitOrderActivated)
 
         # The radio buttons that enable the dropdown menus
-        self.ui.common1_rb.clicked.connect(self.common_1_click)
-        self.ui.common2_rb.clicked.connect(self.common_2_click)
+        self.ui.dropdownButtonA.clicked.connect(self.common_1_click)
+        self.ui.dropdownButtonB.clicked.connect(self.common_2_click)
 
         # The radio buttons that enable the search bars
-        self.ui.enter1_rb.clicked.connect(self.enter_1_click)
-        self.ui.enter2_rb.clicked.connect(self.enter_2_click)
+        self.ui.searchButtonA.clicked.connect(self.enter_1_click)
+        self.ui.searchButtonB.clicked.connect(self.enter_2_click)
 
         # Pressing enter in the text input boxes for points and std dev triggers
         # updating the plot
-        self.ui.points.returnPressed.connect(self.points_entered)
+        self.ui.numPoints.returnPressed.connect(self.points_entered)
         self.ui.numStdDevs.returnPressed.connect(self.stdDevEntered)
 
         # Triggers a redrawing upon pressing enter in the search bar.
         # Proper usage should be using the search bar to search, and selecting
         # from the results in the list. If it's not in the list, it's an invalid
         # PV with no reason to attempt plotting
-        self.ui.enter1.returnPressed.connect(self.inputActivated)
-        self.ui.enter2.returnPressed.connect(self.inputActivated)
+        self.ui.searchInputA.returnPressed.connect(self.inputActivated)
+        self.ui.searchInputB.returnPressed.connect(self.inputActivated)
 
     def showGrid(self):
-        self.plot.showGrid(self.ui.grid_cb.isChecked(),
-                           self.ui.grid_cb.isChecked())
+        self.plot.showGrid(self.ui.checkBoxShowGrid.isChecked(),
+                           self.ui.checkBoxShowGrid.isChecked())
 
     def setUpGraph(self):
         layout = QGridLayout()
-        self.ui.widget.setLayout(layout)
+        self.ui.widgetPlot.setLayout(layout)
         layout.addWidget(self.plot, 0, 0)
         self.plot.showGrid(1, 1)
 
@@ -236,10 +241,10 @@ class RTBSA(QMainWindow):
                 widget.addItem(pv)
 
     def searchA(self):
-        self.search(self.ui.enter1, self.ui.listWidget)
+        self.search(self.ui.searchInputA, self.ui.bsaListA)
 
     def searchB(self):
-        self.search(self.ui.enter2, self.ui.listWidget_2)
+        self.search(self.ui.searchInputB, self.ui.bsaListB)
 
     def setEnter(self, widget, enter, search, enter_rb):
         selection = widget.currentItem()
@@ -252,19 +257,19 @@ class RTBSA(QMainWindow):
             self.timer.singleShot(250, self.initializePlot)
 
     def setEnterA(self):
-        self.setEnter(self.ui.listWidget, self.ui.enter1, self.searchA,
-                      self.ui.enter1_rb)
+        self.setEnter(self.ui.bsaListA, self.ui.searchInputA, self.searchA,
+                      self.ui.searchButtonA)
 
     def setEnterB(self):
-        self.setEnter(self.ui.listWidget_2, self.ui.enter2, self.searchB,
-                      self.ui.enter2_rb)
+        self.setEnter(self.ui.bsaListB, self.ui.searchInputB, self.searchB,
+                      self.ui.searchButtonB)
 
     def correctInput(self, errorMessage, acceptableTxt, textBox):
         self.statusBar().showMessage(errorMessage, 6000)
         textBox.setText(acceptableTxt)
 
     def correctNumpoints(self, errorMessage, acceptableValue):
-        self.correctInput(errorMessage, str(acceptableValue), self.ui.points)
+        self.correctInput(errorMessage, str(acceptableValue), self.ui.numPoints)
         self.numPoints = acceptableValue
 
     def correctStdDevs(self, errorMessage, acceptableValue):
@@ -285,7 +290,7 @@ class RTBSA(QMainWindow):
 
     def points_entered(self):
         try:
-            self.numPoints = int(self.ui.points.text())
+            self.numPoints = int(self.ui.numPoints.text())
 
             if self.numPoints > rtbsaUtils.BUFF_LENGTH_LIMIT or self.numPoints < 1:
                 raise ValueError
@@ -305,38 +310,40 @@ class RTBSA(QMainWindow):
     # initializes the BSA plotting and then starts a timer to update the plot.
     ############################################################################
     def initializePlot(self):
-        plotTypeIsValid = (self.ui.AvsT_cb.isChecked()
-                           or self.ui.AvsB.isChecked()
-                           or self.ui.AFFT.isChecked())
+        plotTypeIsValid = (self.ui.checkBoxAvsT.isChecked()
+                           or self.ui.checkBoxBvsA.isChecked()
+                           or self.ui.checkBoxFFT.isChecked())
 
         if not plotTypeIsValid:
             self.statusBar().showMessage('Pick a Plot Type (PV vs. time '
                                          'or B vs A)', 10000)
             return
 
-        self.ui.draw_button.setDisabled(True)
+        self.ui.startButton.setDisabled(True)
         self.abort = False
 
         self.cleanPlot()
         self.pvObjects["A"], self.pvObjects["B"] = None, None
 
         # Plot history buffer for one PV
-        if self.ui.AvsT_cb.isChecked():
-            if self.populateDevices(self.ui.common1_rb, self.ui.common1,
-                                    self.ui.enter1_rb, self.ui.enter1, "A"):
+        if self.ui.checkBoxAvsT.isChecked():
+            if self.populateDevices(self.ui.dropdownButtonA, self.ui.dropdownA,
+                                    self.ui.searchButtonA, self.ui.searchInputA,
+                                    "A"):
                 self.genPlotAndSetTimer(self.genTimePlotA,
                                         self.updateTimePlotA)
 
         # Plot for 2 PVs
-        elif self.ui.AvsB.isChecked():
+        elif self.ui.checkBoxBvsA.isChecked():
             if self.updateValsFromInput():
                 self.genPlotAndSetTimer(self.genPlotAB,
                                         self.updatePlotAB)
 
         # Plot power spectrum
         else:
-            if self.populateDevices(self.ui.common1_rb, self.ui.common1,
-                                    self.ui.enter1_rb, self.ui.enter1, "A"):
+            if self.populateDevices(self.ui.dropdownButtonA, self.ui.dropdownA,
+                                    self.ui.searchButtonA, self.ui.searchInputA,
+                                    "A"):
                 self.genPlotAndSetTimer(self.InitializeFFTPlot,
                                         self.updatePlotFFT)
 
@@ -353,7 +360,7 @@ class RTBSA(QMainWindow):
                 self.devices[device] = pv
             else:
                 self.printStatus('Device ' + device + ' blank. Aborting.')
-                self.ui.draw_button.setEnabled(True)
+                self.ui.startButton.setEnabled(True)
                 return False
 
         return True
@@ -366,12 +373,14 @@ class RTBSA(QMainWindow):
 
     def updateValsFromInput(self):
 
-        if not self.populateDevices(self.ui.common1_rb, self.ui.common1,
-                                    self.ui.enter1_rb, self.ui.enter1, "A"):
+        if not self.populateDevices(self.ui.dropdownButtonA, self.ui.dropdownA,
+                                    self.ui.searchButtonA, self.ui.searchInputA,
+                                    "A"):
             return False
 
-        if not self.populateDevices(self.ui.common2_rb, self.ui.common2,
-                                    self.ui.enter2_rb, self.ui.enter2, "B"):
+        if not self.populateDevices(self.ui.dropdownButtonB, self.ui.dropdownB,
+                                    self.ui.searchButtonB, self.ui.searchInputB,
+                                    "B"):
             return False
 
         self.printStatus("Initializing/Synchronizing " + self.devices["A"]
@@ -455,7 +464,8 @@ class RTBSA(QMainWindow):
     # append it to our raw data buffer for that device.
     # Initialization of the buffer is slightly different in that the listener is
     # put on the history buffer of that PV (denoted by the HSTBR suffix), so
-    # that we just immediately write the previous rtbsaUtils.BUFF_LENGTH_LIMIT points to our raw buffer
+    # that we just immediately write the previous BUFF_LENGTH_LIMIT points to our
+    # raw buffer
     ############################################################################
     def updateTimeAndBuffer(self, device, pvname, timestamp, value):
 
@@ -569,7 +579,7 @@ class RTBSA(QMainWindow):
     #       t1_start    t2_start                     t1_end      t2_end
     #
     #
-    # Note that both buffers are of the same size (rtbsaUtils.BUFF_LENGTH_LIMIT) so that:
+    # Note that both buffers are of the same size (BUFF_LENGTH_LIMIT) so that:
     # (t1_end - t1_start) = (t2_end - t2_start)
     #
     # From the diagram, we see that only the time between t2_start and t1_end
@@ -586,7 +596,7 @@ class RTBSA(QMainWindow):
     # That whole rigmarole only applies to the initial population of the buffers
     # (where we're pulling the entire history buffer at once using the HSTBR
     # suffix). From then on, we're indexing into the raw buffers using the
-    # pulse ID modulo rtbsaUtils.BUFF_LENGTH_LIMIT, so they're inherently synchronized
+    # pulse ID modulo BUFF_LENGTH_LIMIT, so they're inherently synchronized
     ############################################################################
     def populateSynchronizedBuffers(self, syncByTime):
 
@@ -617,7 +627,8 @@ class RTBSA(QMainWindow):
             return 0
 
         if syncByTime:
-            numBadShots = int(round((self.timeStamps["B"] - self.timeStamps["A"])
+            numBadShots = int(round((self.timeStamps["B"]
+                                     - self.timeStamps["A"])
                                     * self.getRate()))
 
             startA, endA = rtbsaUtils.getIndices(numBadShots, 1)
@@ -698,30 +709,30 @@ class RTBSA(QMainWindow):
 
         if yData.size:
             self.plotAttributes["curve"].setData(yData)
-            if self.ui.autoscale_cb.isChecked():
+            if self.ui.checkBoxAutoscale.isChecked():
                 mx = max(yData)
                 mn = min(yData)
                 if mx - mn > .00001:
                     self.plot.setYRange(mn, mx)
                     self.plot.setXRange(0, len(yData))
 
-            if self.ui.avg_cb.isChecked():
+            if self.ui.checkBoxShowAve.isChecked():
                 rtbsaUtils.setPosAndText(self.text["avg"], mean(yData), 0,
                                          min(yData), 'AVG: ')
 
-            if self.ui.std_cb.isChecked():
+            if self.ui.checkBoxShowStdDev.isChecked():
                 rtbsaUtils.setPosAndText(self.text["std"], std(yData),
                                          self.numPoints / 4, min(yData),
                                          'STD: ')
 
-            if self.ui.corr_cb.isChecked():
+            if self.ui.checkBoxCorrCoeff.isChecked():
                 self.text["corr"].setText('')
 
-            if self.ui.line_cb.isChecked():
+            if self.ui.checkBoxLinFit.isChecked():
                 self.text["slope"].setPos(self.numPoints / 2, min(yData))
                 self.getLinearFit(xData, yData, True)
 
-            elif self.ui.parab_cb.isChecked():
+            elif self.ui.checkBoxPolyFit.isChecked():
                 self.text["slope"].setPos(self.numPoints / 2, min(yData))
                 self.getPolynomialFit(xData, yData, True)
 
@@ -764,7 +775,7 @@ class RTBSA(QMainWindow):
                                                     x < rtbsaUtils.IPK_LIMIT,
                                                     xData, yData)
 
-        if self.ui.filterByStdDevs.isChecked():
+        if self.ui.checkBoxStdDev.isChecked():
             stdDevFilterFunc = self.StdDevFilterFunc(mean(yData), std(yData))
             xData, yData = rtbsaUtils.filterBuffers(yData, stdDevFilterFunc,
                                                     xData, yData)
@@ -807,9 +818,8 @@ class RTBSA(QMainWindow):
                                        + str("+{:.2e}".format(co[2])) + 'x'
                                        + str("+{:.2e}".format(co[3])))
 
-
     def genPlotAB(self):
-        if self.ui.filterByStdDevs.isChecked():
+        if self.ui.checkBoxStdDev.isChecked():
             self.plotCurveAndFit(self.filteredBuffers["A"],
                                  self.filteredBuffers["B"])
         else:
@@ -829,13 +839,13 @@ class RTBSA(QMainWindow):
         self.plot.setTitle(title)
 
         # Fit line
-        if self.ui.line_cb.isChecked():
+        if self.ui.checkBoxLinFit.isChecked():
             self.getLinearFit(xData, yData, False)
             self.plot.addItem(self.plotAttributes["fit"])
 
         # Fit polynomial
-        elif self.ui.parab_cb.isChecked():
-            self.ui.fitedit.setDisabled(False)
+        elif self.ui.checkBoxPolyFit.isChecked():
+            self.ui.fitOrder.setDisabled(False)
             try:
                 self.getPolynomialFit(xData, yData, False)
                 self.plot.addItem(self.plotAttributes["parab"])
@@ -856,7 +866,7 @@ class RTBSA(QMainWindow):
         self.filterNans()
         self.filterPeakCurrent()
 
-        if self.ui.filterByStdDevs.isChecked():
+        if self.ui.checkBoxStdDev.isChecked():
             self.filterStdDev()
             self.updateLabelsAndFit(self.filteredBuffers["A"],
                                     self.filteredBuffers["B"])
@@ -915,7 +925,7 @@ class RTBSA(QMainWindow):
         self.plotAttributes["curve"].setData(bufferA, bufferB)
 
         try:
-            if self.ui.autoscale_cb.isChecked():
+            if self.ui.checkBoxAutoscale.isChecked():
                 self.setPlotRanges(bufferA, bufferB)
 
             minBufferA = nanmin(bufferA)
@@ -923,29 +933,29 @@ class RTBSA(QMainWindow):
             maxBufferA = nanmax(bufferA)
             maxBufferB = nanmax(bufferB)
 
-            if self.ui.avg_cb.isChecked():
+            if self.ui.checkBoxShowAve.isChecked():
                 rtbsaUtils.setPosAndText(self.text["avg"], nanmean(bufferB),
                                          minBufferA,
                                          minBufferB, 'AVG: ')
 
-            if self.ui.std_cb.isChecked():
+            if self.ui.checkBoxShowStdDev.isChecked():
                 xPos = (minBufferA + (minBufferA + maxBufferA) / 2) / 2
 
                 rtbsaUtils.setPosAndText(self.text["std"], nanstd(bufferB),
                                          xPos, minBufferB, 'STD: ')
 
-            if self.ui.corr_cb.isChecked():
+            if self.ui.checkBoxCorrCoeff.isChecked():
                 correlation = corrcoef(bufferA, bufferB)
                 rtbsaUtils.setPosAndText(self.text["corr"], correlation.item(1),
                                          minBufferA, maxBufferB,
                                          "Corr. Coefficient: ")
 
-            if self.ui.line_cb.isChecked():
+            if self.ui.checkBoxLinFit.isChecked():
                 self.text["slope"].setPos((minBufferA + maxBufferA) / 2,
                                           minBufferB)
                 self.getLinearFit(bufferA, bufferB, True)
 
-            elif self.ui.parab_cb.isChecked():
+            elif self.ui.checkBoxPolyFit.isChecked():
                 self.text["slope"].setPos((minBufferA + maxBufferA) / 2,
                                           minBufferB)
                 self.getPolynomialFit(bufferA, bufferB, True)
@@ -1026,6 +1036,18 @@ class RTBSA(QMainWindow):
         self.printStatus("Initializing " + self.devices["A"] + " buffer...",
                          True)
 
+        if self.ui.dropdownButtonA.isChecked():
+            self.devices["A"] = str(self.ui.dropdownA.currentText())
+
+        elif self.ui.searchButtonA.isChecked():
+            pv = str(self.ui.searchInputA.text()).strip()
+            if pv and pv in self.bsapvs:
+                self.devices["A"] = pv
+            else:
+                return None
+        else:
+            return None
+
         # Initializing our data by putting a callback on the history buffer PV
         hstbrConnected = self.clearAndUpdateCallback("A", "HSTBR",
                                                      self.callbackA,
@@ -1055,7 +1077,7 @@ class RTBSA(QMainWindow):
 
         ps = self.genPlotFFT(self.rawBuffers["A"], True)
 
-        if self.ui.autoscale_cb.isChecked():
+        if self.ui.checkBoxAutoscale.isChecked():
             mx = max(ps)
             mn = min(ps)
             if mx - mn > .00001:
@@ -1067,82 +1089,83 @@ class RTBSA(QMainWindow):
         self.timer.singleShot(self.updateTime, self.updatePlotFFT)
 
     def AvsTClick(self):
-        if not self.ui.AvsT_cb.isChecked():
+        if not self.ui.checkBoxAvsT.isChecked():
             pass
         else:
-            self.ui.AvsB.setChecked(False)
-            self.ui.AFFT.setChecked(False)
+            self.ui.checkBoxBvsA.setChecked(False)
+            self.ui.checkBoxFFT.setChecked(False)
             self.AvsBClick()
 
     def AvsBClick(self):
-        if not self.ui.AvsB.isChecked():
-            self.ui.groupBox_2.setDisabled(True)
-            self.ui.enter2_rb.setChecked(False)
-            self.ui.enter2_rb.setDisabled(True)
-            self.ui.enter2.setDisabled(True)
-            self.ui.common2.setDisabled(True)
-            self.ui.common2_rb.setChecked(False)
-            self.ui.common2_rb.setDisabled(True)
+        if not self.ui.checkBoxBvsA.isChecked():
+            self.ui.groupBoxB.setDisabled(True)
+            self.ui.searchButtonB.setChecked(False)
+            self.ui.searchButtonB.setDisabled(True)
+            self.ui.searchInputB.setDisabled(True)
+            self.ui.dropdownB.setDisabled(True)
+            self.ui.dropdownButtonB.setChecked(False)
+            self.ui.dropdownButtonB.setDisabled(True)
         else:
-            self.ui.AvsT_cb.setChecked(False)
-            self.ui.AFFT.setChecked(False)
+            self.ui.checkBoxAvsT.setChecked(False)
+            self.ui.checkBoxFFT.setChecked(False)
             self.AvsTClick()
-            self.ui.groupBox_2.setDisabled(False)
-            self.ui.listWidget_2.setDisabled(True)
-            self.ui.enter2_rb.setDisabled(False)
-            self.ui.enter2.setDisabled(True)
-            self.ui.common2_rb.setDisabled(False)
-            self.ui.common2_rb.setChecked(True)
-            self.ui.common2.setDisabled(False)
+            self.ui.groupBoxB.setDisabled(False)
+            self.ui.bsaListB.setDisabled(True)
+            self.ui.searchButtonB.setDisabled(False)
+            self.ui.searchInputB.setDisabled(True)
+            self.ui.dropdownButtonB.setDisabled(False)
+            self.ui.dropdownButtonB.setChecked(True)
+            self.ui.dropdownB.setDisabled(False)
+
         self.stop()
         self.timer.singleShot(250, self.initializePlot)
 
     def AFFTClick(self):
-        if not self.ui.AFFT.isChecked():
+        if not self.ui.checkBoxFFT.isChecked():
             pass
         else:
-            self.ui.AvsB.setChecked(False)
-            self.ui.AvsT_cb.setChecked(False)
+            self.ui.checkBoxBvsA.setChecked(False)
+            self.ui.checkBoxAvsT.setChecked(False)
             self.AvsBClick()
 
     def avg_click(self):
-        if not self.ui.avg_cb.isChecked():
+        if not self.ui.checkBoxShowAve.isChecked():
             self.text["avg"].setText('')
 
     def std_click(self):
-        if not self.ui.std_cb.isChecked():
+        if not self.ui.checkBoxShowStdDev.isChecked():
             self.text["std"].setText('')
 
     def corr_click(self):
-        if not self.ui.corr_cb.isChecked():
+        if not self.ui.checkBoxCorrCoeff.isChecked():
             self.text["corr"].setText('')
 
     def enter_1_click(self):
-        if self.ui.enter1_rb.isChecked():
-            self.ui.enter1.setDisabled(False)
-            self.ui.listWidget.setDisabled(False)
-            self.ui.common1_rb.setChecked(False)
-            self.ui.common1.setDisabled(True)
+        if self.ui.searchButtonA.isChecked():
+            self.ui.searchInputA.setDisabled(False)
+            self.ui.bsaListA.setDisabled(False)
+            self.ui.dropdownButtonA.setChecked(False)
+            self.ui.dropdownA.setDisabled(True)
         else:
-            self.ui.enter1.setDisabled(True)
+            self.ui.searchInputA.setDisabled(True)
 
     def enter_2_click(self):
-        if self.ui.enter2_rb.isChecked():
-            self.ui.enter2.setDisabled(False)
-            self.ui.listWidget_2.setDisabled(False)
-            self.ui.common2_rb.setChecked(False)
-            self.ui.common2.setDisabled(True)
+        if self.ui.searchButtonB.isChecked():
+            self.ui.searchInputB.setDisabled(False)
+            self.ui.bsaListB.setDisabled(False)
+            self.ui.dropdownButtonB.setChecked(False)
+            self.ui.dropdownB.setDisabled(True)
         else:
-            self.ui.enter2.setDisabled(True)
+            self.ui.searchInputB.setDisabled(True)
 
     def common_1_click(self):
-        if self.ui.common1_rb.isChecked():
-            self.ui.common1.setEnabled(True)
-            self.ui.enter1_rb.setChecked(False)
-            self.ui.enter1.setDisabled(True)
-            self.ui.listWidget.setDisabled(True)
+        if self.ui.dropdownButtonA.isChecked():
+            self.ui.dropdownA.setEnabled(True)
+            self.ui.searchButtonA.setChecked(False)
+            self.ui.searchInputA.setDisabled(True)
+            self.ui.bsaListA.setDisabled(True)
         else:
-            self.ui.common1.setEnabled(False)
+            self.ui.dropdownA.setEnabled(False)
         self.inputActivated()
 
     def inputActivated(self):
@@ -1151,24 +1174,24 @@ class RTBSA(QMainWindow):
             self.timer.singleShot(250, self.initializePlot)
 
     def common_2_click(self):
-        if self.ui.common2_rb.isChecked():
-            self.ui.common2.setEnabled(True)
-            self.ui.enter2_rb.setChecked(False)
-            self.ui.enter2.setDisabled(True)
-            self.ui.listWidget_2.setDisabled(True)
+        if self.ui.dropdownButtonB.isChecked():
+            self.ui.dropdownB.setEnabled(True)
+            self.ui.searchButtonB.setChecked(False)
+            self.ui.searchInputB.setDisabled(True)
+            self.ui.bsaListB.setDisabled(True)
         else:
-            self.ui.common2.setEnabled(False)
+            self.ui.dropdownB.setEnabled(False)
         self.inputActivated()
 
     def line_click(self):
-        self.ui.parab_cb.setChecked(False)
-        self.ui.fitedit.setDisabled(True)
-        self.ui.label.setDisabled(True)
+        self.ui.checkBoxPolyFit.setChecked(False)
+        self.ui.fitOrder.setDisabled(True)
+        self.ui.labelFitOrder.setDisabled(True)
         self.reinitialize_plot()
 
     def fitOrderActivated(self):
         try:
-            self.fitOrder = int(self.ui.fitedit.text())
+            self.fitOrder = int(self.ui.fitOrder.text())
         except ValueError:
             self.statusBar().showMessage('Enter an integer, 1-10', 6000)
             return
@@ -1178,7 +1201,7 @@ class RTBSA(QMainWindow):
                                          + ' to you?  The (already ridiculous)'
                                          + ' range is 1-10.  Hope you win a '
                                          + 'nobel prize jackass.', 6000)
-            self.ui.fitedit.setText('2')
+            self.ui.fitOrder.setText('2')
             self.fitOrder = 2
 
         if self.fitOrder != 2:
@@ -1188,14 +1211,14 @@ class RTBSA(QMainWindow):
                 pass
 
     def parab_click(self):
-        self.ui.line_cb.setChecked(False)
+        self.ui.checkBoxLinFit.setChecked(False)
 
-        if not self.ui.parab_cb.isChecked():
-            self.ui.fitedit.setDisabled(True)
-            self.ui.label.setDisabled(True)
+        if not self.ui.checkBoxPolyFit.isChecked():
+            self.ui.fitOrder.setDisabled(True)
+            self.ui.labelFitOrder.setDisabled(True)
         else:
-            self.ui.fitedit.setEnabled(True)
-            self.ui.label.setEnabled(True)
+            self.ui.fitOrder.setEnabled(True)
+            self.ui.labelFitOrder.setEnabled(True)
 
         self.reinitialize_plot()
 
@@ -1205,10 +1228,10 @@ class RTBSA(QMainWindow):
         self.cleanPlot()
 
         # Setup for single PV plotting
-        if self.ui.AvsT_cb.isChecked():
+        if self.ui.checkBoxAvsT.isChecked():
             self.genTimePlotA()
 
-        elif self.ui.AvsB.isChecked():
+        elif self.ui.checkBoxBvsA.isChecked():
             self.genPlotAB()
         else:
             self.genPlotFFT(self.synchronizedBuffers["A"], False)
@@ -1236,7 +1259,7 @@ class RTBSA(QMainWindow):
 
         self.abort = True
         self.statusBar().showMessage('Stopped')
-        self.ui.draw_button.setDisabled(False)
+        self.ui.startButton.setDisabled(False)
         self.rawBuffers["A"][:] = nan
         self.rawBuffers["B"][:] = nan
         QApplication.processEvents()
@@ -1283,7 +1306,7 @@ class RTBSA(QMainWindow):
         filePath = unicode(QFileDialog.getSaveFileName(self, 'Save file', '',
                                                        file_choices))
         if filePath:
-            self.ui.widget.canvas.print_figure(filePath, dpi=100)
+            self.ui.widgetPlot.canvas.print_figure(filePath, dpi=100)
             self.statusBar().showMessage('Saved to %s' % filePath, 2000)
 
     def on_about(self):
