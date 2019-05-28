@@ -20,6 +20,8 @@ from pyqtgraph import PlotWidget, PlotCurveItem, ScatterPlotItem, TextItem
 from scipy.stats import nanmean, nanstd
 from subprocess import CalledProcessError, check_output
 
+from getpass import getuser
+
 from rtbsa_UI import Ui_RTBSA
 import rtbsaUtils
 
@@ -39,10 +41,15 @@ class RTBSA(QMainWindow):
         self.loadStyleSheet()
         self.setUpGraph()
 
-        self.bsapvs = ['GDET:FEE1:241:ENRC', 'GDET:FEE1:242:ENRC',
-                       'GDET:FEE1:361:ENRC', 'GDET:FEE1:362:ENRC']
+        # Gets the username of the account running the program (i.e. physics,
+        # fphysics, spear, etc.)
+        self.user = getuser()
 
-        self.populateBSAPVs()
+        self.bsapvs = []
+
+        if self.user == "physics":
+            self.populateBSAPVs()
+
         self.connectGuiFunctions()
 
         # Initial number of points
@@ -63,7 +70,11 @@ class RTBSA(QMainWindow):
         # Used to update plot
         self.timer = QTimer(self)
 
-        self.ratePV = PV('IOC:IN20:EV01:RG01_ACTRATE')
+        if self.user == "physics":
+            self.ratePV = PV('IOC:IN20:EV01:RG01_ACTRATE')
+
+        elif self.user == "spear":
+            self.ratePV = PV("LINAC:RateSetpt")
 
         self.menuBar().setStyleSheet('QWidget{background-color:grey;color:purple}')
         self.create_menu()
@@ -108,7 +119,10 @@ class RTBSA(QMainWindow):
         self.bothPVsBSA = True
 
     def getRate(self):
-        return rtbsaUtils.rateDict[self.ratePV.value]
+        if self.user == "physics":
+            return rtbsaUtils.rateDictLCLS[self.ratePV.value]
+        elif self.user == "spear":
+            return rtbsaUtils.rateDictSPEAR[self.ratePV.value]
 
     def disableInputs(self):
         self.ui.fitOrder.setDisabled(True)
@@ -121,6 +135,8 @@ class RTBSA(QMainWindow):
         self.ui.checkBoxPolyFit.setChecked(False)
 
     def populateBSAPVs(self):
+        self.bsapvs += ['GDET:FEE1:241:ENRC', 'GDET:FEE1:242:ENRC',
+                        'GDET:FEE1:361:ENRC', 'GDET:FEE1:362:ENRC']
         # Generate list of BSA PVS
         try:
             BSAPVs = check_output(['eget', '-ts', 'ds', '-a',
@@ -153,17 +169,22 @@ class RTBSA(QMainWindow):
         self.ui.bsaListA.itemClicked.connect(self.setEnterA)
         self.ui.bsaListB.itemClicked.connect(self.setEnterB)
 
-        # Dropdown menu for device A (add common BSA PV's)
-        self.ui.dropdownA.addItems(rtbsaUtils.commonlist)
+        if self.user == "physics":
+            # Dropdown menu for device A (add common BSA PV's)
+            self.ui.dropdownA.addItems(rtbsaUtils.commonListLCLS)
 
-        # Make bunch length default selection
-        index = rtbsaUtils.commonlist.index("BLEN:LI24:886:BIMAX")
-        self.ui.dropdownA.setCurrentIndex(index)
+            # Dropdown menu for device B
+            self.ui.dropdownB.addItems(rtbsaUtils.commonListLCLS)
+
+            # Make bunch length default selection
+            index = rtbsaUtils.commonListLCLS.index("BLEN:LI24:886:BIMAX")
+            self.ui.dropdownA.setCurrentIndex(index)
+
+        elif self.user == "spear":
+            self.ui.dropdownA.addItems(rtbsaUtils.commonListSPEAR)
+            self.ui.dropdownB.addItems(rtbsaUtils.commonListSPEAR)
 
         self.ui.dropdownA.activated.connect(self.inputActivated)
-
-        # Dropdown menu for device B
-        self.ui.dropdownB.addItems(rtbsaUtils.commonlist)
         self.ui.dropdownB.activated.connect(self.inputActivated)
 
         # All the checkboxes in the Settings section
@@ -296,7 +317,7 @@ class RTBSA(QMainWindow):
                 raise ValueError
 
         except ValueError:
-            self.correctNumpoints('Enter an integer, 1 to rtbsaUtils.BUFF_LENGTH_LIMIT',
+            self.correctNumpoints('Enter an integer, 1 to BUFF_LENGTH_LIMIT',
                                   rtbsaUtils.BUFF_LENGTH_LIMIT)
             return
 
@@ -391,16 +412,21 @@ class RTBSA(QMainWindow):
         return True
 
     def initializeBuffers(self):
-        # Initial population of our buffers using the HSTBR PV's in our
-        # callback functions
-        self.bothPVsBSA = self.clearAndUpdateCallbacks("HSTBR", resetTime=True)
+        if self.user == "spear":
+            self.bothPVsBSA = False
 
-        if self.bothPVsBSA:
-            while ((not self.timeStamps["A"] or not self.timeStamps["B"])
-                   and not self.abort):
-                QApplication.processEvents()
+        if self.user == "physics":
+            # Initial population of our buffers using the HSTBR PV's in our
+            # callback functions
+            self.bothPVsBSA = self.clearAndUpdateCallbacks("HSTBR",
+                                                           resetTime=True)
 
-        self.adjustSynchronizedBuffers(True)
+            if self.bothPVsBSA:
+                while ((not self.timeStamps["A"] or not self.timeStamps["B"])
+                       and not self.abort):
+                    QApplication.processEvents()
+
+            self.adjustSynchronizedBuffers(True)
 
         # Switch to BR PVs to avoid pulling an entire history buffer on every
         # update.
@@ -438,7 +464,8 @@ class RTBSA(QMainWindow):
         # Make sure that the initial raw buffer is synchronized and pad with
         # nans if it's less than rtbsaUtils.BUFF_LENGTH_LIMIT points long
         if resetRawBuffer:
-            nanArray = empty(rtbsaUtils.BUFF_LENGTH_LIMIT - self.synchronizedBuffers[device].size)
+            nanArray = empty(rtbsaUtils.BUFF_LENGTH_LIMIT
+                             - self.synchronizedBuffers[device].size)
             nanArray[:] = nan
             self.rawBuffers[device] = \
                 concatenate([self.synchronizedBuffers[device], nanArray])
@@ -464,8 +491,8 @@ class RTBSA(QMainWindow):
     # append it to our raw data buffer for that device.
     # Initialization of the buffer is slightly different in that the listener is
     # put on the history buffer of that PV (denoted by the HSTBR suffix), so
-    # that we just immediately write the previous BUFF_LENGTH_LIMIT points to our
-    # raw buffer
+    # that we just immediately write the previous BUFF_LENGTH_LIMIT points to
+    # our raw buffer
     ############################################################################
     def updateTimeAndBuffer(self, device, pvname, timestamp, value):
 
@@ -548,20 +575,25 @@ class RTBSA(QMainWindow):
         start_time = time()
         gotStuckAndNeedToUpdateMessage = False
 
-        # self.rate is a PV, such that .value is shorthand for .getval
-        while self.ratePV.value < 2:
-            # noinspection PyArgumentList
-            QApplication.processEvents()
+        if self.user == "physics":
+            # self.rate is a PV, such that .value is shorthand for .getval
+            while self.ratePV.value < 2:
+                # noinspection PyArgumentList
+                QApplication.processEvents()
 
-            if time() - start_time > 0.5:
-                gotStuckAndNeedToUpdateMessage = True
-                self.printStatus("Waiting for beam rate to be at least 1Hz...",
-                                 False)
+                if time() - start_time > 0.5:
+                    gotStuckAndNeedToUpdateMessage = True
+                    self.printStatus("Waiting for beam rate to be at least"
+                                     " 1Hz...",
+                                     False)
 
-        if gotStuckAndNeedToUpdateMessage:
-            self.printStatus("Running", False)
+            if gotStuckAndNeedToUpdateMessage:
+                self.printStatus("Running", False)
 
-        return rtbsaUtils.rateDict[self.ratePV.value]
+            return rtbsaUtils.rateDictLCLS[self.ratePV.value]
+
+        elif self.user == "spear":
+            return rtbsaUtils.rateDictSPEAR[self.ratePV.value]
 
     ############################################################################
     # Time 1 is when Device A started acquiring data, and Time 2 is when Device
@@ -603,7 +635,7 @@ class RTBSA(QMainWindow):
         def padSyncBufferWithNans(device, startIdx, endIdx):
             lag = endIdx - startIdx
 
-            if lag > 20:
+            if self.user == "physics" and lag > 20:
                 print ("Reinitializing buffers due to " + str(lag)
                        + " shot lag for device " + device)
                 self.initializeBuffers()
@@ -621,10 +653,10 @@ class RTBSA(QMainWindow):
             else:
                 padSyncBufferWithNans(device, startIdx, endIdx)
 
-        if not self.bothPVsBSA:
-            self.synchronizedBuffers["A"] = self.rawBuffers["A"]
-            self.synchronizedBuffers["B"] = self.rawBuffers["B"]
-            return 0
+        # if not self.bothPVsBSA:
+        #     self.synchronizedBuffers["A"] = self.rawBuffers["A"]
+        #     self.synchronizedBuffers["B"] = self.rawBuffers["B"]
+        #     return 0
 
         if syncByTime:
             numBadShots = int(round((self.timeStamps["B"]
@@ -648,6 +680,9 @@ class RTBSA(QMainWindow):
             # store the values at the time of buffer-copying
             timeStampA = self.timeStamps["A"]
             timeStampB = self.timeStamps["B"]
+
+            if not timeStampA or not timeStampB:
+                return 0
 
             currIdxA = self.currIdx["A"]
             currIdxB = self.currIdx["B"]
@@ -1036,26 +1071,17 @@ class RTBSA(QMainWindow):
         self.printStatus("Initializing " + self.devices["A"] + " buffer...",
                          True)
 
-        if self.ui.dropdownButtonA.isChecked():
-            self.devices["A"] = str(self.ui.dropdownA.currentText())
+        if self.user == "physics":
+            # Initializing our data by putting a callback on the history buffer
+            # PV
+            hstbrConnected = self.clearAndUpdateCallback("A", "HSTBR",
+                                                         self.callbackA,
+                                                         self.devices["A"],
+                                                         True)
 
-        elif self.ui.searchButtonA.isChecked():
-            pv = str(self.ui.searchInputA.text()).strip()
-            if pv and pv in self.bsapvs:
-                self.devices["A"] = pv
-            else:
-                return None
-        else:
-            return None
-
-        # Initializing our data by putting a callback on the history buffer PV
-        hstbrConnected = self.clearAndUpdateCallback("A", "HSTBR",
-                                                     self.callbackA,
-                                                     self.devices["A"], True)
-
-        if hstbrConnected:
-            while (not self.timeStamps["A"]) and not self.abort:
-                QApplication.processEvents()
+            if hstbrConnected:
+                while (not self.timeStamps["A"]) and not self.abort:
+                    QApplication.processEvents()
 
         # Removing that callback and manually appending new values to our local
         # data buffer using the usual PV

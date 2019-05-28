@@ -8,17 +8,16 @@ from xml.etree import ElementTree
 from re import sub
 from shutil import copy
 
-
 IPK_LIMIT = 12000
 
 BUFF_LENGTH_LIMIT = 10000
 
-
 # IOC:IN20:EV01:RG01_ACTRATE returns one of 7 states, 0 through 6, where
 # 0 is NULL (unclear what that means, but doesn't sound good), 1 is 0Hz,
 # 2 is 1Hz, 3 is 10Hz, 4 is 30Hz, 5 is 60Hz, and 6 is 120Hz
-rateDict = {0: 0.0, 1: 0.0, 2: 1.0, 3: 10.0, 4: 30.0, 5: 60.0, 6: 120.0,
-            7: 120.0}
+rateDictLCLS = {0: 0.0, 1: 0.0, 2: 1.0, 3: 10.0, 4: 30.0, 5: 60.0, 6: 120.0,
+                7: 120.0}
+rateDictSPEAR = {0: 10.0, 1: 5.0, 2: 3.3, 3: 2.0, 4: 1.0}
 
 
 def setPosAndText(attribute, value, posValX, posValY, textVal):
@@ -81,7 +80,6 @@ def padWithNans(dataBuffer, start, end):
 # with class variables (i.e. there's no need for a "self" parameter)
 ############################################################################
 def getIndices(numBadShots, mult):
-
     return (max(0, mult * numBadShots),
             min(BUFF_LENGTH_LIMIT, BUFF_LENGTH_LIMIT + (mult * numBadShots)))
 
@@ -163,22 +161,27 @@ def MCCLog(tmpPNG, tmpPS, plotItem):
     os.system(printFile)
 
 
-commonList = ['GDET:FEE1:241:ENRC', 'GDET:FEE1:242:ENRC',
-              'GDET:FEE1:361:ENRC', 'GDET:FEE1:362:ENRC',
-              'KLYS:LI20:K6:VOLT', 'ACCL:IN20:300:L0A_P',
-              'ACCL:IN20:300:L0A_A', 'KLYS:LI20:K7:VOLT',
-              'ACCL:IN20:400:L0B_P', 'ACCL:IN20:400:L0B_A',
-              'KLYS:LI20:K8:VOLT', 'BPMS:IN20:731:X',
-              'ACCL:LI21:1:L1S_P', 'ACCL:LI21:1:L1S_A',
-              'KLYS:LI21:K1:VOLT', 'ACCL:LI21:180:L1X_P',
-              'ACCL:LI21:180:L1X_A', 'KLYS:LI21:K2:VOLT',
-              'BPMS:LI21:233:X', 'BLEN:LI21:265:AIMAX',
-              'BPMS:LI24:801:X', 'BLEN:LI24:886:BIMAX',
-              'BPMS:LTU1:250:X', 'BPMS:LTU1:450:X', 'BPMS:UND1:1090:X',
-              'BPMS:UND1:1090:Y', 'BPMS:UND1:2090:X',
-              'BPMS:UND1:2090:Y', 'BLD:SYS0:500:UND_POS_X',
-              'BLD:SYS0:500:UND_ANG_X', 'BLD:SYS0:500:UND_POS_Y',
-              'BLD:SYS0:500:UND_ANG_Y']
+commonListLCLS = ['GDET:FEE1:241:ENRC', 'GDET:FEE1:242:ENRC',
+                  'GDET:FEE1:361:ENRC', 'GDET:FEE1:362:ENRC',
+                  'KLYS:LI20:K6:VOLT', 'ACCL:IN20:300:L0A_P',
+                  'ACCL:IN20:300:L0A_A', 'KLYS:LI20:K7:VOLT',
+                  'ACCL:IN20:400:L0B_P', 'ACCL:IN20:400:L0B_A',
+                  'KLYS:LI20:K8:VOLT', 'BPMS:IN20:731:X',
+                  'ACCL:LI21:1:L1S_P', 'ACCL:LI21:1:L1S_A',
+                  'KLYS:LI21:K1:VOLT', 'ACCL:LI21:180:L1X_P',
+                  'ACCL:LI21:180:L1X_A', 'KLYS:LI21:K2:VOLT',
+                  'BPMS:LI21:233:X', 'BLEN:LI21:265:AIMAX',
+                  'BPMS:LI24:801:X', 'BLEN:LI24:886:BIMAX',
+                  'BPMS:LTU1:250:X', 'BPMS:LTU1:450:X', 'BPMS:UND1:1090:X',
+                  'BPMS:UND1:1090:Y', 'BPMS:UND1:2090:X',
+                  'BPMS:UND1:2090:Y', 'BLD:SYS0:500:UND_POS_X',
+                  'BLD:SYS0:500:UND_ANG_X', 'BLD:SYS0:500:UND_POS_Y',
+                  'BLD:SYS0:500:UND_ANG_Y']
+
+commonListSPEAR = ["SPEAR:BeamCurrAvg", "BOO-QM:RunAvg10", "BTS-BPM01:X",
+                   "BTS-BPM09:X", "SPEAR:BeamFillCharge",
+                   "SPEAR:BeamFillInjectEff", "GUN:FrwdPwrAvg",
+                   "LIN-K2:FrwdPwrAvg", "LTB-BPM02:X"]
 
 bsaPVs = ['ACCL:IN20:300:L0A_P',
           'ACCL:IN20:400:L0B_A',
