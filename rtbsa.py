@@ -96,12 +96,17 @@ class RTBSA(QMainWindow):
 
         self.synchronizedBuffers = {"A": empty(rtbsaUtils.BUFF_LENGTH_LIMIT),
                                     "B": empty(rtbsaUtils.BUFF_LENGTH_LIMIT)}
+        self.synchronizedBuffers["A"][:] = nan
+        self.synchronizedBuffers["B"][:] = nan
 
         # Versions of data buffers A and B that are filtered by standard
         # deviation. Didn't want to edit those buffers directly so that we could
         # unfilter or refilter with a different number more efficiently
         self.filteredBuffers = {"A": empty(rtbsaUtils.BUFF_LENGTH_LIMIT),
                                 "B": empty(rtbsaUtils.BUFF_LENGTH_LIMIT)}
+
+        self.filteredBuffers["A"][:] = nan
+        self.filteredBuffers["B"][:] = nan
 
         # Text objects that appear on the plot
         self.text = {"avg": None, "std": None, "slope": None, "corr": None}
@@ -404,10 +409,13 @@ class RTBSA(QMainWindow):
                                     "B"):
             return False
 
-        self.printStatus("Initializing/Synchronizing " + self.devices["A"]
-                         + " and " + self.devices["B"] + " buffers...")
+        self.printStatus("Initializing/Synchronizing {A} and {B} buffers..."
+                         .format(A=self.devices["A"], B=self.devices["B"]))
 
         self.initializeBuffers()
+        
+        if self.user == "spear":
+            sleep(2)
 
         return True
 
@@ -712,7 +720,7 @@ class RTBSA(QMainWindow):
         # Run updateMethod every updatetime milliseconds
         self.timer.singleShot(self.updateTime, updateMethod)
 
-        # self.printStatus('Running')
+        self.printStatus('Running')
 
     # noinspection PyTypeChecker
     def genTimePlotA(self):
@@ -854,6 +862,8 @@ class RTBSA(QMainWindow):
                                        + str("+{:.2e}".format(co[3])))
 
     def genPlotAB(self):
+        self.filterNans()
+
         if self.ui.checkBoxStdDev.isChecked():
             self.plotCurveAndFit(self.filteredBuffers["A"],
                                  self.filteredBuffers["B"])
@@ -866,8 +876,13 @@ class RTBSA(QMainWindow):
         self.plotAttributes["curve"] = ScatterPlotItem(xData, yData, pen=1,
                                                        symbol='x', size=5)
         self.plot.addItem(self.plotAttributes["curve"])
-        self.plotFit(xData, yData,
-                     self.devices["B"] + ' vs. ' + self.devices["A"])
+        if xData.size > 1 and yData.size > 1:
+            self.plotFit(xData, yData,
+                         self.devices["B"] + ' vs. ' + self.devices["A"])
+        else:
+            self.plotAttributes["fit"] = PlotCurveItem([], [], 'g-',
+                                                       linewidth=1)
+            self.plot.addItem(self.plotAttributes["fit"])
 
     def plotFit(self, xData, yData, title):
         self.plot.addItem(self.plotAttributes["curve"])
@@ -899,7 +914,8 @@ class RTBSA(QMainWindow):
 
         self.adjustSynchronizedBuffers()
         self.filterNans()
-        self.filterPeakCurrent()
+        if self.user == "physics":
+            self.filterPeakCurrent()
 
         if self.ui.checkBoxStdDev.isChecked():
             self.filterStdDev()
@@ -957,6 +973,7 @@ class RTBSA(QMainWindow):
 
     # noinspection PyTypeChecker
     def updateLabelsAndFit(self, bufferA, bufferB):
+
         self.plotAttributes["curve"].setData(bufferA, bufferB)
 
         try:
@@ -1068,8 +1085,8 @@ class RTBSA(QMainWindow):
             self.plot.addItem(plotLabel)
 
     def initializeData(self):
-        self.printStatus("Initializing " + self.devices["A"] + " buffer...",
-                         True)
+        self.printStatus("Initializing {A} buffer..."
+                         .format(A=self.devices["A"]), True)
 
         if self.user == "physics":
             # Initializing our data by putting a callback on the history buffer
@@ -1085,10 +1102,12 @@ class RTBSA(QMainWindow):
 
         # Removing that callback and manually appending new values to our local
         # data buffer using the usual PV
-        # TODO ask Ahmed what the BR is for
         if not self.clearAndUpdateCallback("A", "", self.callbackA,
                                            self.devices["A"]):
             return None
+
+        if self.user == "spear":
+            sleep(2)
 
         # This was populated in the callback function
         return self.rawBuffers["A"]
