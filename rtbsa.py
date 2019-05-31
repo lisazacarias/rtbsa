@@ -385,7 +385,7 @@ class RTBSA(QMainWindow):
             if pv:
                 self.devices[device] = pv
             else:
-                self.printStatus('Device ' + device + ' blank. Aborting.')
+                self.printStatus("Device {D} blank. Aborting.".format(D=device))
                 self.ui.startButton.setEnabled(True)
                 return False
 
@@ -413,7 +413,7 @@ class RTBSA(QMainWindow):
                          .format(A=self.devices["A"], B=self.devices["B"]))
 
         self.initializeBuffers()
-        
+
         if self.user == "spear":
             sleep(2)
 
@@ -422,6 +422,7 @@ class RTBSA(QMainWindow):
     def initializeBuffers(self):
         if self.user == "spear":
             self.bothPVsBSA = False
+            self.clearAndUpdateCallbacks("", resetRawBuffer=True)
 
         if self.user == "physics":
             # Initial population of our buffers using the HSTBR PV's in our
@@ -436,9 +437,11 @@ class RTBSA(QMainWindow):
 
             self.adjustSynchronizedBuffers(True)
 
-        # Switch to BR PVs to avoid pulling an entire history buffer on every
-        # update.
-        self.clearAndUpdateCallbacks("", resetRawBuffer=True)
+            # Try to switch to the beam rate PVs (if available, else, just the
+            # base PV) to avoid pulling an entire history buffer
+            # on every update.
+            if not self.clearAndUpdateCallbacks("BR", resetRawBuffer=True):
+                self.clearAndUpdateCallbacks("", resetRawBuffer=True)
 
     def clearAndUpdateCallbacks(self, suffix, resetTime=False,
                                 resetRawBuffer=False):
