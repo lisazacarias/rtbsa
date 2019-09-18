@@ -63,7 +63,8 @@ class RTBSA(QMainWindow):
         # Used to update plot
         self.timer = QTimer(self)
 
-        self.ratePV = PV('IOC:IN20:EV01:RG01_ACTRATE')
+        # self.ratePV = PV('IOC:IN20:EV01:RG01_ACTRATE')
+        self.ratePV = PV("TPR:LGUN:TS01:0:CH00_RATE")
 
         self.menuBar().setStyleSheet('QWidget{background-color:grey;color:purple}')
         self.create_menu()
@@ -101,7 +102,8 @@ class RTBSA(QMainWindow):
         self.currIdx = {"A": 0, "B": 0}
 
     def getRate(self):
-        return rtbsaUtils.rateDict[self.ratePV.value]
+        # return rtbsaUtils.rateDict[self.ratePV.value]
+        return self.ratePV.value
 
     def disableInputs(self):
         self.ui.fitOrder.setDisabled(True)
@@ -524,10 +526,11 @@ class RTBSA(QMainWindow):
         gotStuckAndNeedToUpdateMessage = False
 
         # self.rate is a PV, such that .value is shorthand for .getval
-        while self.ratePV.value < 2:
-            # noinspection PyArgumentList
+        while self.ratePV.value < 1:
+        # while self.ratePV.value < 2:
+        #     # noinspection PyArgumentList
             QApplication.processEvents()
-
+        #
             if time() - start_time > 0.5:
                 gotStuckAndNeedToUpdateMessage = True
                 self.printStatus("Waiting for beam rate to be at least 1Hz...",
@@ -536,7 +539,8 @@ class RTBSA(QMainWindow):
         if gotStuckAndNeedToUpdateMessage:
             self.printStatus("Running", False)
 
-        return rtbsaUtils.rateDict[self.ratePV.value]
+        # return rtbsaUtils.rateDict[self.ratePV.value]
+        return self.ratePV.value
 
     ############################################################################
     # Time 1 is when Device A started acquiring data, and Time 2 is when Device
