@@ -71,7 +71,7 @@ class RTBSA(QMainWindow):
         self.timer = QTimer(self)
 
         if self.user == "physics":
-            self.ratePV = PV('TPR:LGUN:TS01:0:CH00_RATE')
+            self.ratePV = PV('EVNT:SYS0:1:LCLSBEAMRATE')
 
         elif self.user == "spear":
             self.ratePV = PV("LINAC:RateSetpt")
