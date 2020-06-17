@@ -64,7 +64,7 @@ class RTBSA(QMainWindow):
         self.timer = QTimer(self)
 
         # self.ratePV = PV('IOC:IN20:EV01:RG01_ACTRATE')
-        self.ratePV = PV("TPR:LGUN:TS01:0:CH00_RATE")
+        self.ratePV = PV("EVNT:SYS0:1:LCLSBEAMRATE")
 
         self.menuBar().setStyleSheet('QWidget{background-color:grey;color:purple}')
         self.create_menu()
